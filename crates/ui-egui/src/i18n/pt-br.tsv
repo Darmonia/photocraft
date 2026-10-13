@@ -3934,3 +3934,6 @@ layerLabel	No Color	Sem cor
 	Sent to {printer}	Enviado para {printer}
 	set in Print Settings…	definido nas configurações de impressão…
 	ICO is limited to 256 × 256 pixels	ICO é limitado a 256 × 256 pixels
+# BCS V2 - Perspective Warp linked-plane labels
+	Link Edges	Vincular arestas
+	Join matching neighbouring edges within 8 document pixels; preserves other planes	Vincula arestas adjacentes correspondentes em até 8 pixels do documento; preserva os demais planos

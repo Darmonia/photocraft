@@ -3752,3 +3752,6 @@ navigator	Zoom	Zvětšení
 	Sent to {printer}	Odesláno do {printer}
 	set in Print Settings…	nastavuje se v nastavení tisku…
 	ICO is limited to 256 × 256 pixels	ICO je omezen na 256 × 256 pixelů
+# BCS V2 - Perspective Warp linked-plane labels
+	Link Edges	Propojit hrany
+	Join matching neighbouring edges within 8 document pixels; preserves other planes	Propojí odpovídající sousední hrany do vzdálenosti 8 pixelů dokumentu; ostatní roviny zůstanou beze změny

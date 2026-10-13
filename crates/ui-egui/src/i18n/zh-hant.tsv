@@ -2739,3 +2739,6 @@ curves	Smooth	平滑
 	Sent to {printer}	已傳送至 {printer}
 	set in Print Settings…	在列印設定中設定…
 	ICO is limited to 256 × 256 pixels	ICO 最大為 256 × 256 像素
+# BCS V2 - Perspective Warp linked-plane labels
+	Link Edges	連結邊緣
+	Join matching neighbouring edges within 8 document pixels; preserves other planes	連結文件中相距不超過 8 像素的相符相鄰邊緣；其他平面保持不變

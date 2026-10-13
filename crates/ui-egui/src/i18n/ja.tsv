@@ -3821,3 +3821,6 @@ curves	Smooth	スムーズ
 	Reset All Locked Settings	ロックされた設定をすべて初期化
 	Copy Texture to Other Tools	テクスチャを他のツールにコピー
 	ICO is limited to 256 × 256 pixels	ICO は 256 × 256 ピクセルまでです
+# BCS V2 - Perspective Warp linked-plane labels
+	Link Edges	エッジを連結
+	Join matching neighbouring edges within 8 document pixels; preserves other planes	ドキュメント上で8ピクセル以内の隣接する対応エッジを連結し、他の面は変更しません

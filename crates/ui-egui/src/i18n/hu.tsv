@@ -4065,3 +4065,7 @@ cameraRaw	Yellow	Sárga
 	Ink Characteristics	Festék jellemzői
 	Solidity:	Fedőképesség:
 	Redrawing	Újrarajzolás
+
+# BCS V2 - Perspective Warp linked-plane labels
+	Link Edges	Élek összekapcsolása
+	Join matching neighbouring edges within 8 document pixels; preserves other planes	Összekapcsolja az egyező szomszédos éleket 8 dokumentumképponton belül; a többi síkot megőrzi

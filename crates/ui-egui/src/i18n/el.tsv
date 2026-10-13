@@ -3842,3 +3842,6 @@ curves	Smooth	Εξομάλυνση
 	Sent to {printer}	Στάλθηκε στον {printer}
 	set in Print Settings…	ορίζεται στις ρυθμίσεις εκτύπωσης…
 	ICO is limited to 256 × 256 pixels	Το ICO περιορίζεται σε 256 × 256 εικονοστοιχεία
+# BCS V2 - Perspective Warp linked-plane labels
+	Link Edges	Σύνδεση ακμών
+	Join matching neighbouring edges within 8 document pixels; preserves other planes	Συνδέει γειτονικές ακμές που ταιριάζουν σε απόσταση έως 8 εικονοστοιχεία εγγράφου· τα άλλα επίπεδα διατηρούνται

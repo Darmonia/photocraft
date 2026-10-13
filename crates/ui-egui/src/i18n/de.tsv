@@ -3142,3 +3142,6 @@ curves	Smooth	Glätten
 	Sent to {printer}	An {printer} gesendet
 	set in Print Settings…	in den Druckeinstellungen festlegen…
 	ICO is limited to 256 × 256 pixels	ICO ist auf 256 × 256 Pixel begrenzt
+# BCS V2 - Perspective Warp linked-plane labels
+	Link Edges	Kanten verbinden
+	Join matching neighbouring edges within 8 document pixels; preserves other planes	Übereinstimmende benachbarte Kanten innerhalb von 8 Dokumentpixeln verbinden; andere Ebenen bleiben unverändert

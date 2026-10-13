@@ -3876,3 +3876,7 @@ cameraData	Lens	Lens
 	Ink Characteristics	Mürekkep Özellikleri
 	Solidity:	Doluluk:
 	Redrawing	Yeniden çiziliyor
+
+# BCS V2 - Perspective Warp linked-plane labels
+	Link Edges	Kenarları Bağla
+	Join matching neighbouring edges within 8 document pixels; preserves other planes	Birbirine uyan komşu kenarları 8 belge pikseli içinde bağlar; diğer düzlemler korunur

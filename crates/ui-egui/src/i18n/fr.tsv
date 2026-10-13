@@ -3146,3 +3146,6 @@ curves	Smooth	Lisser
 	Sent to {printer}	Envoyé à {printer}
 	set in Print Settings…	défini dans les paramètres d’impression…
 	ICO is limited to 256 × 256 pixels	Le format ICO est limité à 256 × 256 pixels
+# BCS V2 - Perspective Warp linked-plane labels
+	Link Edges	Lier les arêtes
+	Join matching neighbouring edges within 8 document pixels; preserves other planes	Relie les arêtes voisines correspondantes à moins de 8 pixels du document ; préserve les autres plans

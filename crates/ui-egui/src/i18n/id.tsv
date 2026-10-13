@@ -3133,3 +3133,6 @@ curves	Smooth	Haluskan
 	Sent to {printer}	Dikirim ke {printer}
 	set in Print Settings…	diatur di Pengaturan Cetak…
 	ICO is limited to 256 × 256 pixels	ICO dibatasi hingga 256 × 256 piksel
+# BCS V2 - Perspective Warp linked-plane labels
+	Link Edges	Tautkan Tepi
+	Join matching neighbouring edges within 8 document pixels; preserves other planes	Tautkan tepi bersebelahan yang cocok dalam jarak 8 piksel dokumen; bidang lain tetap terjaga

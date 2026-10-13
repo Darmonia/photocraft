@@ -3631,3 +3631,6 @@ curves	Smooth	Làm mượt
 	Sent to {printer}	Đã gửi tới {printer}
 	set in Print Settings…	đặt trong thiết lập in…
 	ICO is limited to 256 × 256 pixels	ICO giới hạn ở 256 × 256 pixel
+# BCS V2 - Perspective Warp linked-plane labels
+	Link Edges	Liên kết cạnh
+	Join matching neighbouring edges within 8 document pixels; preserves other planes	Liên kết các cạnh kề nhau khớp nhau trong phạm vi 8 pixel của tài liệu; giữ nguyên các mặt phẳng khác
