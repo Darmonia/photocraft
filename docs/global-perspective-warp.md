@@ -22,7 +22,7 @@ A single valid quadrilateral can provide a solution, but has no independent cons
 
 Safety is checked over the complete source rectangle, not only at guide corners: the projective denominator must remain positive and bounded away from zero at all four corners; its affine form proves that there is no horizon crossing inside. A nonsingular matrix with positive determinant then has positive Jacobian everywhere on that domain. This is an analytic no-fold/injectivity guard, not a claim based solely on sampling mesh cells. Output expansion, coordinates and pixel counts are also bounded.
 
-Limits: at most 128 guides, source coordinates within the photo, positive weights 0.05..20, aspect 0.25..4, at most 32768 pixels on one image side, and a final raster allocation budget of 67,108,864 output pixels including filter support. Nonfinite, duplicate-ID, degenerate and non-clockwise guides are rejected. The V3 initial scope is an **unmasked raster photo layer**, including Background (converted in the same undoable edit). Selections, layer masks, vector masks and Smart Objects are explicitly rejected; use a rasterized/flattened COPY rather than silently dropping those features. The original file is never automatically overwritten.
+Limits: at most 128 guides, finite source guide coordinates (including positions outside the photo, absolute coordinate limit 1,000,000), positive weights 0.05..20, aspect 0.25..4, at most 32768 pixels on one image side, and a final raster allocation budget of 67,108,864 output pixels including filter support. Nonfinite, duplicate-ID, degenerate and non-clockwise guides are rejected. The V3 initial scope is an **unmasked raster photo layer**, including Background (converted in the same undoable edit). Selections, layer masks, vector masks and Smart Objects are explicitly rejected; use a rasterized/flattened COPY rather than silently dropping those features. The original file is never automatically overwritten.
 
 Final rendering uses the existing inverse projective resampler and retains the image's supported color model/sample depth, adding transparency where needed. Preview geometry uses the very same matrix on a 128x128 display mesh with a bounded texture. Texture filtering and reduced display resolution can differ from final pixels; the geometric solution does not. This is not a promise of bit-identical preview colors at different zooms.
 
@@ -91,3 +91,11 @@ The implementation is clean-room Rust based on projective geometry and independe
 8. Valider avec la coche ou Entree. Annuler avec Echap ou restaurer avec Undo. Enregistrer dans un nouveau fichier.
 
 Les limites de plans 3D differents et de proportions reelles restent explicites. Une photo globalement coherente prime sur la rectification forcee de chaque ouverture.
+
+### Precision guide editing
+
+- **Ctrl + drag a corner**: constrain the movement to the horizontal or vertical axis with the strongest initial drag motion. Releasing Ctrl restores free movement. The other corners remain stationary.
+- **Hover an edge**: the cursor changes to a move icon. Drag the edge to translate **both of its endpoint corners together**, without moving the opposite side. Ctrl constrains the edge translation to one axis as well.
+- Corner handles take priority over edges at intersections. These edits only update guide geometry; global rectification is recomputed when **Rectify globally** is pressed. Result preview does not permit local warping.
+
+- **Beyond the photo**: drag a guide corner or edge into the pasteboard outside the image to align extended architectural lines. The guide may extend beyond the pixels; only the photo is transformed. Safety validation still rejects self-intersections, extreme coordinates, or a projective map that becomes unsafe.

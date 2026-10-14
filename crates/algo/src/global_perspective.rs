@@ -297,16 +297,9 @@ pub fn solve(guides: &[Guide], bounds: Rect, options: &Options) -> Result<Soluti
     if active.is_empty() {
         return Err("add at least one enabled rectangular guide".into());
     }
-    // Even disabled guides are displayed through H; reject out-of-domain coordinates
-    // before producing diagnostics that might otherwise contain NaN or infinity.
-    for g in guides {
-        if g.corners
-            .iter()
-            .any(|p| p[0] < bounds.x0 as f64 - 1.0 || p[0] > bounds.x1 as f64 + 1.0 || p[1] < bounds.y0 as f64 - 1.0 || p[1] > bounds.y1 as f64 + 1.0)
-        {
-            return Err(format!("guide {} lies outside the image bounds", g.id));
-        }
-    }
+    // User-drawn guides are allowed to extend into the pasteboard beyond the
+    // raster bounds. Finite/coherent quad checks precede this; validate_map
+    // still protects the actual image domain against horizons or folds.
     // Fit all guides robustly, then use a common inlier set for BOTH directions.
     let mut h = matrix_from_fits(robust_fit(&rows(&active, bounds, true))?, robust_fit(&rows(&active, bounds, false))?, bounds, options.aspect)?;
     let mut used = Vec::new();
@@ -343,6 +336,15 @@ pub fn solve(guides: &[Guide], bounds: Rect, options: &Options) -> Result<Soluti
     let output_pixels = (output[2].ceil() - output[0].floor() + 2.0) * (output[3].ceil() - output[1].floor() + 2.0);
     if output_pixels > MAX_OUTPUT_PIXELS {
         return Err("global rectification output exceeds the 64-megapixel safety budget".into());
+    }
+    // An off-canvas guide could cross a projective horizon outside the image.
+    // Keep user controls permissive, but never expose non-finite previews or
+    // diagnostics from an unsafe extrapolation of H beyond its safe domain.
+    for g in guides {
+        let transformed = mapped(&h, &g.corners);
+        if transformed.iter().flatten().any(|x| !x.is_finite() || x.abs() > 1_000_000.0) {
+            return Err(format!("guide {} projects outside the safe preview domain", g.id));
+        }
     }
     let rejected: Vec<u64> = active.iter().filter(|g| !used.contains(&g.id)).map(|g| g.id).collect();
     let mut results: Vec<GuideResult> = guides
@@ -521,11 +523,15 @@ mod tests {
         assert!(s.max_used_error_deg < 2.0);
     }
     #[test]
-    fn disabled_invalid_domain_and_excessive_count_are_rejected() {
+    fn off_image_disabled_guides_are_safe_but_invalid_and_excessive_count_are_rejected() {
         let (r, mut g) = fixture();
-        let mut outside = guide(77, [[2000.0, 10.0], [2100.0, 10.0], [2100.0, 100.0], [2000.0, 100.0]]);
+        let mut outside = guide(77, [[-50.0, 10.0], [50.0, 10.0], [50.0, 100.0], [-50.0, 100.0]]);
         outside.enabled = false;
         g.push(outside);
+        let solution = solve(&g, r, &Options::default()).unwrap();
+        assert_eq!(solution.used_guide_ids.len(), 6);
+        assert_eq!(solution.guides.len(), 7);
+        g.last_mut().unwrap().corners[0][0] = f64::NAN;
         assert!(solve(&g, r, &Options::default()).is_err());
         let many: Vec<_> = (0..129).map(|id| guide(id, [[10.0, 10.0], [40.0, 10.0], [40.0, 80.0], [10.0, 80.0]])).collect();
         assert!(solve(&many, r, &Options::default()).is_err());
@@ -533,6 +539,15 @@ mod tests {
             guide.enabled = false;
         }
         assert!(solve(&g, r, &Options::default()).is_err());
+    }
+    #[test]
+    fn enabled_guide_may_cross_image_border_without_changing_the_photo_domain() {
+        let r = Rect::new(0, 0, 300, 200);
+        let g = [guide(1, [[-35.0, -12.0], [75.0, -12.0], [75.0, 140.0], [-35.0, 140.0]])];
+        let solution = solve(&g, r, &Options::default()).unwrap();
+        assert!(solution.min_jacobian > 0.0);
+        assert!(solution.guides[0].transformed_corners.iter().flatten().all(|v| v.is_finite()));
+        assert_eq!(solution.source_bounds, [0.0, 0.0, 300.0, 200.0]);
     }
     #[test]
     fn incompatible_equal_groups_are_not_stitched() {

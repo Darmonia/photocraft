@@ -13,10 +13,81 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 
 const GRID: usize = 128;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Axis {
+    Horizontal,
+    Vertical,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Handle {
+    Corner { id: u64, corner: usize },
+    Edge { id: u64, edge: usize },
+}
+
 #[derive(Clone)]
 enum Drag {
     New { start: [f64; 2], current: [f64; 2] },
-    Corner { id: u64, corner: usize, offset: [f64; 2] },
+    Corner { id: u64, corner: usize, offset: [f64; 2], start: [f64; 2], axis: Option<Axis> },
+    Edge { id: u64, edge: usize, mouse_start: [f64; 2], original: [[f64; 2]; 4], axis: Option<Axis> },
+}
+
+/// Ctrl constrains to the dominant drag axis, fixed at the first deliberate movement.
+/// Releasing Ctrl restores free movement; pressing it again determines a new axis.
+fn axis_restrict(delta: [f64; 2], ctrl: bool, locked: Option<Axis>) -> ([f64; 2], Option<Axis>) {
+    if !ctrl {
+        return (delta, None);
+    }
+    let axis = locked.or_else(|| {
+        if delta[0].abs().max(delta[1].abs()) < 2.0 {
+            None
+        } else if delta[0].abs() >= delta[1].abs() {
+            Some(Axis::Horizontal)
+        } else {
+            Some(Axis::Vertical)
+        }
+    });
+    match axis {
+        Some(Axis::Horizontal) => ([delta[0], 0.0], axis),
+        Some(Axis::Vertical) => ([0.0, delta[1]], axis),
+        None => ([0.0, 0.0], None),
+    }
+}
+
+fn distance_to_segment(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> f64 {
+    let v = [b[0] - a[0], b[1] - a[1]];
+    let len2 = v[0] * v[0] + v[1] * v[1];
+    if len2 <= f64::EPSILON {
+        return f64::INFINITY;
+    }
+    let t = ((p[0] - a[0]) * v[0] + (p[1] - a[1]) * v[1]) / len2;
+    if !(0.0..=1.0).contains(&t) {
+        return f64::INFINITY;
+    }
+    let closest = [a[0] + t * v[0], a[1] + t * v[1]];
+    (p[0] - closest[0]).hypot(p[1] - closest[1])
+}
+
+/// Test corners first so an endpoint never accidentally selects its adjoining edge.
+fn hit_handle(s: &GlobalSession, p: [f64; 2], tol: f64) -> Option<Handle> {
+    for g in s.guides.iter().rev() {
+        for (corner, raw) in g.corners.iter().enumerate() {
+            let q = s.map(*raw);
+            if (q[0] - p[0]).hypot(q[1] - p[1]) <= tol {
+                return Some(Handle::Corner { id: g.id, corner });
+            }
+        }
+    }
+    for g in s.guides.iter().rev() {
+        for edge in 0..4 {
+            let a = s.map(g.corners[edge]);
+            let b = s.map(g.corners[(edge + 1) % 4]);
+            if distance_to_segment(p, a, b) <= tol {
+                return Some(Handle::Edge { id: g.id, edge });
+            }
+        }
+    }
+    None
 }
 
 pub struct GlobalSession {
@@ -68,7 +139,8 @@ impl GlobalSession {
         self.update_grid();
     }
     fn move_corner(&mut self, id: u64, index: usize, p: [f64; 2]) {
-        let p = [p[0].clamp(self.bounds.x0 as f64, self.bounds.x1 as f64), p[1].clamp(self.bounds.y0 as f64, self.bounds.y1 as f64)];
+        // Guide handles may extend into the pasteboard, outside the image itself.
+        // validate_guides still rejects non-finite, excessive or folded geometry.
         let Some(guide) = self.guides.iter().find(|g| g.id == id) else { return };
         let mut next = guide.clone();
         let Some(c) = next.corners.get_mut(index) else { return };
@@ -78,6 +150,45 @@ impl GlobalSession {
                 *guide = next;
             }
             self.invalidate();
+        }
+    }
+
+    fn translate_edge(&mut self, id: u64, edge: usize, original: [[f64; 2]; 4], delta: [f64; 2]) {
+        let Some(guide) = self.guides.iter().find(|g| g.id == id) else { return };
+        let mut next = guide.clone();
+        let neighbor = (edge + 1) % 4;
+        // Preserve the complete edge's displacement even outside the image.
+        // Both endpoints share the exact delta; invalid quads are rejected atomically.
+        for corner in [edge, neighbor] {
+            next.corners[corner] = [original[corner][0] + delta[0], original[corner][1] + delta[1]];
+        }
+        if validate_guides(std::slice::from_ref(&next)).is_ok() {
+            if let Some(guide) = self.guides.iter_mut().find(|g| g.id == id) {
+                *guide = next;
+            }
+            self.invalidate();
+        }
+    }
+
+    fn drag_to(&mut self, p: [f64; 2], mods: egui::Modifiers) {
+        match self.drag.clone() {
+            Some(Drag::New { start, .. }) => {
+                self.drag = Some(Drag::New { start, current: p });
+            }
+            Some(Drag::Corner { id, corner, offset, start, axis }) => {
+                let proposed = [p[0] + offset[0], p[1] + offset[1]];
+                let delta = [proposed[0] - start[0], proposed[1] - start[1]];
+                let (delta, axis) = axis_restrict(delta, mods.ctrl, axis);
+                self.move_corner(id, corner, [start[0] + delta[0], start[1] + delta[1]]);
+                self.drag = Some(Drag::Corner { id, corner, offset, start, axis });
+            }
+            Some(Drag::Edge { id, edge, mouse_start, original, axis }) => {
+                let raw = [p[0] - mouse_start[0], p[1] - mouse_start[1]];
+                let (delta, axis) = axis_restrict(raw, mods.ctrl, axis);
+                self.translate_edge(id, edge, original, delta);
+                self.drag = Some(Drag::Edge { id, edge, mouse_start, original, axis });
+            }
+            None => {}
         }
     }
 }
@@ -244,6 +355,21 @@ fn inside(p: [f64; 2], q: &[[f64; 2]; 4]) -> bool {
         (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]) >= 0.0
     })
 }
+pub fn hover_cursor(app: &PhotocraftApp, p: [f64; 2], tol: f64) -> Option<egui::CursorIcon> {
+    let s = app.distort.global_perspective.as_ref()?;
+    if !bound_to_active_document(app, s) || s.show_result {
+        return Some(egui::CursorIcon::Default);
+    }
+    if s.drag.is_some() {
+        return Some(egui::CursorIcon::Grabbing);
+    }
+    Some(match hit_handle(s, p, tol) {
+        Some(Handle::Corner { .. }) => egui::CursorIcon::ResizeNwSe,
+        Some(Handle::Edge { .. }) => egui::CursorIcon::Move,
+        None => egui::CursorIcon::Crosshair,
+    })
+}
+
 pub fn pointer(app: &mut PhotocraftApp, ev: ToolEvent, mods: egui::Modifiers) {
     if let Err(e) = validate_session(app) {
         app.ui.status = e;
@@ -254,23 +380,26 @@ pub fn pointer(app: &mut PhotocraftApp, ev: ToolEvent, mods: egui::Modifiers) {
     match ev {
         ToolEvent::Down { x, y, .. } => {
             let p = [x, y];
-            let mut corner = None;
-            for g in s.guides.iter().rev() {
-                for (i, c) in g.corners.iter().enumerate() {
-                    let c = s.map(*c);
-                    if (c[0] - x).hypot(c[1] - y) <= tol {
-                        corner = Some((g.id, i, c));
-                        break;
-                    }
-                }
-                if corner.is_some() {
-                    break;
-                }
-            }
-            if let Some((id, i, c)) = corner {
+            if let Some(handle) = hit_handle(s, p, tol) {
+                let id = match handle {
+                    Handle::Corner { id, .. } | Handle::Edge { id, .. } => id,
+                };
                 s.selected = Some(id);
                 if !s.show_result {
-                    s.drag = Some(Drag::Corner { id, corner: i, offset: [c[0] - x, c[1] - y] });
+                    match handle {
+                        Handle::Corner { id, corner } => {
+                            let start = s.guides.iter().find(|g| g.id == id).map(|g| g.corners[corner]);
+                            if let Some(start) = start {
+                                s.drag = Some(Drag::Corner { id, corner, offset: [start[0] - x, start[1] - y], start, axis: None });
+                            }
+                        }
+                        Handle::Edge { id, edge } => {
+                            let original = s.guides.iter().find(|g| g.id == id).map(|g| g.corners);
+                            if let Some(original) = original {
+                                s.drag = Some(Drag::Edge { id, edge, mouse_start: p, original, axis: None });
+                            }
+                        }
+                    }
                 }
             } else if !mods.shift
                 && let Some(g) = s.guides.iter().rev().find(|g| inside(p, &g.corners.map(|c| s.map(c))))
@@ -286,13 +415,10 @@ pub fn pointer(app: &mut PhotocraftApp, ev: ToolEvent, mods: egui::Modifiers) {
                 s.drag = Some(Drag::New { start: p, current: p });
             }
         }
-        ToolEvent::Move { x, y, .. } => match s.drag.clone() {
-            Some(Drag::New { start, .. }) => s.drag = Some(Drag::New { start, current: [x, y] }),
-            Some(Drag::Corner { id, corner, offset }) => s.move_corner(id, corner, [x + offset[0], y + offset[1]]),
-            None => {}
-        },
-        ToolEvent::Up { x, y } => match s.drag.take() {
-            Some(Drag::New { start, .. }) => {
+        ToolEvent::Move { x, y, .. } => s.drag_to([x, y], mods),
+        ToolEvent::Up { x, y } => {
+            if matches!(s.drag.as_ref(), Some(Drag::New { .. })) {
+                let Some(Drag::New { start, .. }) = s.drag.take() else { return };
                 let end = [x.clamp(s.bounds.x0 as f64, s.bounds.x1 as f64), y.clamp(s.bounds.y0 as f64, s.bounds.y1 as f64)];
                 let (x0, y0, x1, y1) = (start[0].min(end[0]), start[1].min(end[1]), start[0].max(end[0]), start[1].max(end[1]));
                 if x1 - x0 > 4.0 && y1 - y0 > 4.0 && s.guides.len() < MAX_GUIDES {
@@ -301,10 +427,13 @@ pub fn pointer(app: &mut PhotocraftApp, ev: ToolEvent, mods: egui::Modifiers) {
                     s.selected = Some(id);
                     s.invalidate();
                 }
+            } else {
+                // Apply the final cursor sample with the active modifier state
+                // before releasing the grab (including an active Ctrl lock).
+                s.drag_to([x, y], mods);
+                s.drag = None;
             }
-            Some(Drag::Corner { id, corner, offset }) => s.move_corner(id, corner, [x + offset[0], y + offset[1]]),
-            None => {}
-        },
+        }
     }
 }
 
@@ -517,6 +646,83 @@ mod tests {
         pointer(&mut a, ToolEvent::Up { x: 30.0, y: 30.0 }, mods);
         assert!(a.distort.global_perspective.as_ref().unwrap().guides.is_empty());
     }
+    #[test]
+    fn ctrl_corner_drag_chooses_and_keeps_the_dominant_horizontal_axis() {
+        let mut a = app();
+        control(&mut a, &json!({"guides":guides()})).unwrap();
+        let ctrl = egui::Modifiers { ctrl: true, ..Default::default() };
+        pointer(&mut a, ToolEvent::Down { x: 25.0, y: 20.0, pressure: 1.0 }, egui::Modifiers::NONE);
+        pointer(&mut a, ToolEvent::Move { x: 42.0, y: 24.0, pressure: 1.0 }, ctrl);
+        pointer(&mut a, ToolEvent::Move { x: 52.0, y: 55.0, pressure: 1.0 }, ctrl);
+        pointer(&mut a, ToolEvent::Up { x: 52.0, y: 55.0 }, ctrl);
+        let c = a.distort.global_perspective.as_ref().unwrap().guides[0].corners;
+        assert_eq!(c[0], [52.0, 20.0]);
+        assert_eq!(c[1], [100.0, 16.0]);
+    }
+    #[test]
+    fn ctrl_corner_vertical_drag_and_release_ctrl_restores_free_movement() {
+        let mut a = app();
+        control(&mut a, &json!({"guides":guides()})).unwrap();
+        let ctrl = egui::Modifiers { ctrl: true, ..Default::default() };
+        pointer(&mut a, ToolEvent::Down { x: 25.0, y: 20.0, pressure: 1.0 }, egui::Modifiers::NONE);
+        pointer(&mut a, ToolEvent::Move { x: 27.0, y: 40.0, pressure: 1.0 }, ctrl);
+        let c = a.distort.global_perspective.as_ref().unwrap().guides[0].corners;
+        assert_eq!(c[0], [25.0, 40.0]);
+        pointer(&mut a, ToolEvent::Move { x: 30.0, y: 43.0, pressure: 1.0 }, egui::Modifiers::NONE);
+        pointer(&mut a, ToolEvent::Up { x: 30.0, y: 43.0 }, egui::Modifiers::NONE);
+        let c = a.distort.global_perspective.as_ref().unwrap().guides[0].corners;
+        assert_eq!(c[0], [30.0, 43.0]);
+    }
+    #[test]
+    fn hover_edge_selects_both_endpoints_while_corner_wins_near_vertex() {
+        let mut a = app();
+        control(&mut a, &json!({"guides":guides()})).unwrap();
+        let s = a.distort.global_perspective.as_ref().unwrap();
+        assert!(matches!(hit_handle(s, [25.0, 20.0], 8.0), Some(Handle::Corner { corner: 0, .. })));
+        assert!(matches!(hit_handle(s, [60.0, 18.0], 8.0), Some(Handle::Edge { edge: 0, .. })));
+        assert_eq!(hover_cursor(&a, [60.0, 18.0], 8.0), Some(egui::CursorIcon::Move));
+        assert_eq!(hover_cursor(&a, [25.0, 20.0], 8.0), Some(egui::CursorIcon::ResizeNwSe));
+        pointer(&mut a, ToolEvent::Down { x: 60.0, y: 18.0, pressure: 1.0 }, egui::Modifiers::NONE);
+        pointer(&mut a, ToolEvent::Move { x: 70.0, y: -15.0, pressure: 1.0 }, egui::Modifiers::NONE);
+        pointer(&mut a, ToolEvent::Up { x: 70.0, y: -15.0 }, egui::Modifiers::NONE);
+        let c = a.distort.global_perspective.as_ref().unwrap().guides[0].corners;
+        assert_eq!(c[0], [35.0, -13.0]);
+        assert_eq!(c[1], [110.0, -17.0]);
+        assert_eq!(c[2], [109.0, 105.0]);
+        assert_eq!(c[3], [21.0, 110.0]);
+        assert!(control(&mut a, &json!({"solve":true})).is_ok());
+    }
+    #[test]
+    fn ctrl_edge_drag_preserves_both_endpoints_and_locks_axis() {
+        let mut a = app();
+        control(&mut a, &json!({"guides":guides()})).unwrap();
+        let ctrl = egui::Modifiers { ctrl: true, ..Default::default() };
+        pointer(&mut a, ToolEvent::Down { x: 23.0, y: 65.0, pressure: 1.0 }, egui::Modifiers::NONE);
+        pointer(&mut a, ToolEvent::Move { x: -20.0, y: 67.0, pressure: 1.0 }, ctrl);
+        pointer(&mut a, ToolEvent::Up { x: -20.0, y: 100.0 }, ctrl);
+        let c = a.distort.global_perspective.as_ref().unwrap().guides[0].corners;
+        assert_eq!(c[0], [-18.0, 20.0]);
+        assert_eq!(c[3], [-22.0, 110.0]);
+        assert_eq!(c[1], [100.0, 16.0]);
+        assert_eq!(c[2], [109.0, 105.0]);
+    }
+    #[test]
+    fn corner_off_image_allowed_and_bad_quad_still_rejected() {
+        let mut a = app();
+        control(&mut a, &json!({"guides":guides()})).unwrap();
+        pointer(&mut a, ToolEvent::Down { x: 25.0, y: 20.0, pressure: 1.0 }, egui::Modifiers::NONE);
+        pointer(&mut a, ToolEvent::Move { x: -20.0, y: -12.0, pressure: 1.0 }, egui::Modifiers::NONE);
+        pointer(&mut a, ToolEvent::Up { x: -20.0, y: -12.0 }, egui::Modifiers::NONE);
+        let s = a.distort.global_perspective.as_ref().unwrap();
+        assert_eq!(s.guides[0].corners[0], [-20.0, -12.0]);
+        assert!(control(&mut a, &json!({"solve":true})).is_ok());
+        control(&mut a, &json!({"mode":"layout"})).unwrap();
+        let s = a.distort.global_perspective.as_mut().unwrap();
+        let saved = s.guides[0].corners;
+        s.move_corner(1, 0, [110.0, 120.0]);
+        assert_eq!(s.guides[0].corners, saved);
+    }
+
     #[test]
     fn menu_route_opens_and_controls_global_tool() {
         let mut a = app();
