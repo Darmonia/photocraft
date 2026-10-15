@@ -2819,3 +2819,6 @@ curves	Smooth	平滑
 	Perspective Warp: {error}	透視彎曲：{error}
 	a plane is degenerate (its corners must form a quad)	平面已退化（四個角點必須構成四邊形）
 	plane coordinates must be finite	平面座標必須是有限數值
+
+# Global Perspective Warp: local perspective-axis dragging
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl：影像軸；Shift：透視軸（角點）

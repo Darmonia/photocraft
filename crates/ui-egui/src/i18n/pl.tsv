@@ -3815,3 +3815,6 @@ curves	Smooth	Wygładź
 	Perspective Warp: {error}	Wypaczenie perspektywy: {error}
 	a plane is degenerate (its corners must form a quad)	płaszczyzna jest zdegenerowana (jej narożniki muszą tworzyć czworokąt)
 	plane coordinates must be finite	współrzędne płaszczyzny muszą być skończone
+
+# Global Perspective Warp: local perspective-axis dragging
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl: osie obrazu; Shift: osie perspektywy (narożniki)

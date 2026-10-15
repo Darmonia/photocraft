@@ -3703,3 +3703,6 @@ curves	Smooth	Làm mượt
 	Perspective Warp: {error}	Biến dạng phối cảnh: {error}
 	a plane is degenerate (its corners must form a quad)	một mặt phẳng bị suy biến (các góc phải tạo thành tứ giác)
 	plane coordinates must be finite	tọa độ mặt phẳng phải là giá trị hữu hạn
+
+# Global Perspective Warp: local perspective-axis dragging
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl: trục ảnh; Shift: trục phối cảnh (góc)

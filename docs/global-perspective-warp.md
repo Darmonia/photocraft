@@ -99,3 +99,42 @@ Les limites de plans 3D differents et de proportions reelles restent explicites.
 - Corner handles take priority over edges at intersections. These edits only update guide geometry; global rectification is recomputed when **Rectify globally** is pressed. Result preview does not permit local warping.
 
 - **Beyond the photo**: drag a guide corner or edge into the pasteboard outside the image to align extended architectural lines. The guide may extend beyond the pixels; only the photo is transformed. Safety validation still rejects self-intersections, extreme coordinates, or a projective map that becomes unsafe.
+
+
+### V3.2 - local perspective-axis lock
+
+In **Edit guides**, hold **Shift while dragging a corner** to move it along either
+of the two adjoining perspective directions. The two lines are derived from the
+quad **at pointer down** and remain fixed throughout that drag. The first deliberate
+mouse movement chooses the nearest (unoriented) line; later diagonal noise does not
+switch it. The signed projection permits extending a corner away from its neighbour,
+including beyond the photo border.
+
+The activation dead zone is two screen points at the initial zoom. A theme-coloured
+rail displays the locked line. Releasing Shift restores free dragging; pressing it
+again reselects an axis from the same original quad. Holding **Ctrl + Shift** gives
+**Ctrl priority**, retaining the image-horizontal/image-vertical behavior. The corner
+grab offset is preserved, and the final pointer-up sample uses the same constraint.
+
+This addition is intentionally for **corners**. Edge dragging still translates both
+endpoints together, with its existing Ctrl constraint; Shift does not create a new
+edge-warp model. Shift-click away from handles can still create a guide inside another.
+All convexity, finite-coordinate, safe-domain and stale-document guards remain active.
+No local image pieces are introduced: the final raster operation is still one global
+homography applied to the active photo layer.
+
+For agents, existing `ui.pointer` events with `modifiers: {"shift": true}` exercise
+the same path as the mouse. `ui.inspect` / global-session descriptions add
+`interactionRevision: "3.2"` and `localAxisConstraint` (null unless a local axis is
+locked; otherwise `{anchor, direction, space: "guide", frozen: true}`). Coordinates
+remain document coordinates. Constraint diagnostics are transient, not a stored
+pixel transform. `guides`, `options`, solve, commit and cancel contracts are unchanged.
+
+Example for a source corner at [60, 45] with adjoining top edge toward [230, 25]:
+
+```json
+{"method":"ui.pointer","params":{"modifiers":{"shift":true},"events":[{"kind":"down","x":60,"y":45},{"kind":"move","x":100,"y":47}]}}
+```
+
+The corner moves along the original [170, -20] direction, not the image X axis.
+Send an `up` event with Shift still held to finish that same constrained gesture.

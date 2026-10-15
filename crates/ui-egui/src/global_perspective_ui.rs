@@ -12,6 +12,11 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::Arc;
 
+mod local_axes;
+#[cfg(test)]
+mod shift_tests;
+use local_axes::LocalAxes;
+
 const GRID: usize = 128;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Axis {
@@ -27,9 +32,27 @@ enum Handle {
 
 #[derive(Clone)]
 enum Drag {
-    New { start: [f64; 2], current: [f64; 2] },
-    Corner { id: u64, corner: usize, offset: [f64; 2], start: [f64; 2], axis: Option<Axis> },
-    Edge { id: u64, edge: usize, mouse_start: [f64; 2], original: [[f64; 2]; 4], axis: Option<Axis> },
+    New {
+        start: [f64; 2],
+        current: [f64; 2],
+    },
+    Corner {
+        id: u64,
+        corner: usize,
+        offset: [f64; 2],
+        start: [f64; 2],
+        axis: Option<Axis>,
+        local_axes: Option<LocalAxes>,
+        local_axis: Option<usize>,
+        activation_distance: f64,
+    },
+    Edge {
+        id: u64,
+        edge: usize,
+        mouse_start: [f64; 2],
+        original: [[f64; 2]; 4],
+        axis: Option<Axis>,
+    },
 }
 
 /// Ctrl constrains to the dominant drag axis, fixed at the first deliberate movement.
@@ -111,7 +134,15 @@ impl GlobalSession {
         json!({"version":"V3","document":self.source_doc.id.0,"layer":self.layer.0,
             "mode":if self.show_result {"result"}else{"layout"},"guides":self.guides,
             "selectedGuide":self.selected,"options":self.options,"solved":self.solution.is_some(),
-            "dirty":self.solution.is_none(),"solution":self.solution,"scope":"wholeRasterLayer"})
+            "dirty":self.solution.is_none(),"solution":self.solution,"scope":"wholeRasterLayer",
+            "interactionRevision":"3.2", "localAxisConstraint":self.active_local_axis().map(|(anchor, direction)|
+                json!({"anchor":anchor,"direction":direction,"space":"guide","frozen":true}))})
+    }
+    fn active_local_axis(&self) -> Option<([f64; 2], [f64; 2])> {
+        match &self.drag {
+            Some(Drag::Corner { start, local_axes: Some(axes), local_axis: Some(axis), .. }) => axes.direction(*axis).map(|direction| (*start, direction)),
+            _ => None,
+        }
     }
     fn map(&self, p: [f64; 2]) -> [f64; 2] {
         if self.show_result
@@ -175,12 +206,22 @@ impl GlobalSession {
             Some(Drag::New { start, .. }) => {
                 self.drag = Some(Drag::New { start, current: p });
             }
-            Some(Drag::Corner { id, corner, offset, start, axis }) => {
+            Some(Drag::Corner { id, corner, offset, start, axis, local_axes, local_axis, activation_distance }) => {
                 let proposed = [p[0] + offset[0], p[1] + offset[1]];
                 let delta = [proposed[0] - start[0], proposed[1] - start[1]];
-                let (delta, axis) = axis_restrict(delta, mods.ctrl, axis);
+                // Ctrl remains the existing image-axis lock, including when both
+                // modifiers are held. Shift uses the original adjacent edge directions.
+                let (delta, axis, local_axis) = if mods.ctrl {
+                    let (d, a) = axis_restrict(delta, true, axis);
+                    (d, a, None)
+                } else if mods.shift {
+                    let (d, a) = local_axes.map_or(([0.0, 0.0], None), |axes| axes.restrict(delta, local_axis, activation_distance));
+                    (d, None, a)
+                } else {
+                    (delta, None, None)
+                };
                 self.move_corner(id, corner, [start[0] + delta[0], start[1] + delta[1]]);
-                self.drag = Some(Drag::Corner { id, corner, offset, start, axis });
+                self.drag = Some(Drag::Corner { id, corner, offset, start, axis, local_axes, local_axis, activation_distance });
             }
             Some(Drag::Edge { id, edge, mouse_start, original, axis }) => {
                 let raw = [p[0] - mouse_start[0], p[1] - mouse_start[1]];
@@ -388,9 +429,23 @@ pub fn pointer(app: &mut PhotocraftApp, ev: ToolEvent, mods: egui::Modifiers) {
                 if !s.show_result {
                     match handle {
                         Handle::Corner { id, corner } => {
-                            let start = s.guides.iter().find(|g| g.id == id).map(|g| g.corners[corner]);
-                            if let Some(start) = start {
-                                s.drag = Some(Drag::Corner { id, corner, offset: [start[0] - x, start[1] - y], start, axis: None });
+                            let snapshot = s
+                                .guides
+                                .iter()
+                                .find(|g| g.id == id)
+                                .and_then(|g| g.corners.get(corner).map(|start| (*start, LocalAxes::at_corner(&g.corners, corner))));
+                            if let Some((start, local_axes)) = snapshot {
+                                s.drag = Some(Drag::Corner {
+                                    id,
+                                    corner,
+                                    offset: [start[0] - x, start[1] - y],
+                                    start,
+                                    axis: None,
+                                    local_axes,
+                                    local_axis: None,
+                                    // tolerance is eight screen points in document space.
+                                    activation_distance: tol * 0.25,
+                                });
                             }
                         }
                         Handle::Edge { id, edge } => {
@@ -475,6 +530,16 @@ pub fn draw(s: &GlobalSession, painter: &egui::Painter, xf: &ViewXform) {
             painter.text(*p + egui::vec2(6.0, 6.0), egui::Align2::LEFT_TOP, g.id.to_string(), egui::FontId::monospace(12.0), color);
         }
     }
+    // A thin, theme-coloured rail makes the chosen perspective direction visible.
+    // ViewXform handles zoom, canvas rotation, mirroring and display pixel aspect.
+    if let Some((anchor, direction)) = s.active_local_axis() {
+        let origin = scr(anchor);
+        let vector = scr([anchor[0] + direction[0], anchor[1] + direction[1]]) - origin;
+        if vector.length_sq().is_finite() && vector.length_sq() > f32::EPSILON {
+            let reach = vector.normalized() * painter.clip_rect().size().length();
+            painter.line_segment([origin - reach, origin + reach], Stroke::new(1.0, t.accent.gamma_multiply(0.55)));
+        }
+    }
     if let Some(Drag::New { start, current }) = &s.drag {
         painter.rect_stroke(egui::Rect::from_two_pos(scr(*start), scr(*current)), 0.0, Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);
     }
@@ -485,7 +550,7 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let mut do_commit = false;
     let mut do_cancel = false;
     let Some(s) = app.distort.global_perspective.as_mut() else { return };
-    ui.label("V3 Global");
+    ui.label("V3.2 Global").on_hover_text(tl!("Ctrl: image axes; Shift: perspective axes (corners)"));
     if ui.selectable_label(!s.show_result, tl!("Edit guides")).clicked() {
         s.show_result = false;
         s.update_grid();

@@ -3916,3 +3916,6 @@ curves	Smooth	Згладити
 	Perspective Warp: {error}	Перспективна деформація: {error}
 	a plane is degenerate (its corners must form a quad)	площина вироджена (її кути мають утворювати чотирикутник)
 	plane coordinates must be finite	координати площини мають бути скінченними
+
+# Global Perspective Warp: local perspective-axis dragging
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl: осі зображення; Shift: осі перспективи (кути)

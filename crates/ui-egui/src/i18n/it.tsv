@@ -4339,3 +4339,6 @@ shape	Appearance	Aspetto
 	Perspective Warp: {error}	Altera prospettiva: {error}
 	a plane is degenerate (its corners must form a quad)	un piano è degenere (i suoi angoli devono formare un quadrilatero)
 	plane coordinates must be finite	le coordinate del piano devono essere finite
+
+# Global Perspective Warp: local perspective-axis dragging
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl: assi immagine; Maiusc: assi prospettici (angoli)

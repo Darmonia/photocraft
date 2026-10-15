@@ -3918,3 +3918,6 @@ curves	Smooth	Εξομάλυνση
 	Perspective Warp: {error}	Παραμόρφωση προοπτικής: {error}
 	a plane is degenerate (its corners must form a quad)	ένα επίπεδο είναι εκφυλισμένο (οι κορυφές του πρέπει να σχηματίζουν τετράπλευρο)
 	plane coordinates must be finite	οι συντεταγμένες του επιπέδου πρέπει να είναι πεπερασμένες
+
+# Global Perspective Warp: local perspective-axis dragging
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl: άξονες εικόνας· Shift: άξονες προοπτικής (γωνίες)

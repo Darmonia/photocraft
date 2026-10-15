@@ -656,3 +656,14 @@ dock target. The panel menu and icon rail remain
 available in custom workspaces. `window.panel.<id> {show:true}` always reveals, selects
 and expands the panel, including when another tab is selected. Workspace snapshots
 retain custom collapse settings and Timeline visibility.
+
+
+### Global Perspective Warp V3.2 guide-axis drag
+
+The existing `edit.perspectiveWarpGlobal` session accepts mouse-equivalent Shift
+input through `ui.pointer`: Shift constrains a corner to one of its original two
+adjoining edge directions. Ctrl retains image-axis constraints and takes precedence
+when both are held. See [Global Perspective Warp](global-perspective-warp.md#v32---local-perspective-axis-lock)
+for the frozen-axis, release and off-canvas behavior. `ui.inspect` now exposes the
+transient `localAxisConstraint` and `interactionRevision` of this session; no engine
+command ID or raster parameter changed.

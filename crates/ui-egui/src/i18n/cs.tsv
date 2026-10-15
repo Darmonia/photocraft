@@ -3825,3 +3825,6 @@ navigator	Zoom	Zvětšení
 	Perspective Warp: {error}	Perspektivní deformace: {error}
 	a plane is degenerate (its corners must form a quad)	rovina je degenerovaná (její rohy musí tvořit čtyřúhelník)
 	plane coordinates must be finite	souřadnice roviny musí být konečná čísla
+
+# Global Perspective Warp: local perspective-axis dragging
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl: osy obrazu; Shift: perspektivní osy (rohy)

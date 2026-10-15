@@ -3209,3 +3209,6 @@ curves	Smooth	Haluskan
 	Perspective Warp: {error}	Distorsi perspektif: {error}
 	a plane is degenerate (its corners must form a quad)	suatu bidang tidak valid (sudut-sudutnya harus membentuk segi empat)
 	plane coordinates must be finite	koordinat bidang harus berupa bilangan berhingga
+
+# Global Perspective Warp: local perspective-axis dragging
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl: sumbu gambar; Shift: sumbu perspektif (sudut)

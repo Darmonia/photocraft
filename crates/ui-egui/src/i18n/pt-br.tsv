@@ -4007,3 +4007,6 @@ layerLabel	No Color	Sem cor
 	Perspective Warp: {error}	Distorção de perspectiva: {error}
 	a plane is degenerate (its corners must form a quad)	um plano é degenerado (seus cantos devem formar um quadrilátero)
 	plane coordinates must be finite	as coordenadas do plano devem ser finitas
+
+# Global Perspective Warp: local perspective-axis dragging
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl: eixos da imagem; Shift: eixos de perspectiva (cantos)

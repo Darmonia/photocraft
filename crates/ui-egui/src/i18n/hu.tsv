@@ -4137,3 +4137,6 @@ cameraRaw	Yellow	Sárga
 	Perspective Warp: {error}	Perspektivikus torzítás: {error}
 	a plane is degenerate (its corners must form a quad)	egy sík elfajult (sarkainak négyszöget kell alkotniuk)
 	plane coordinates must be finite	a sík koordinátáinak végesnek kell lenniük
+
+# Global Perspective Warp: local perspective-axis dragging
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl: képtengelyek; Shift: perspektívatengelyek (sarkok)

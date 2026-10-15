@@ -3220,3 +3220,6 @@ curves	Smooth	Glätten
 	Perspective Warp: {error}	Perspektivisch verkrümmen: {error}
 	a plane is degenerate (its corners must form a quad)	Eine Ebene ist degeneriert (ihre Ecken müssen ein Viereck bilden)
 	plane coordinates must be finite	Ebenenkoordinaten müssen endlich sein
+
+# Global Perspective Warp: local perspective-axis dragging
+	Ctrl: image axes; Shift: perspective axes (corners)	Strg: Bildachsen; Umschalt: Perspektivachsen (Ecken)

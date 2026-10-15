@@ -3894,3 +3894,6 @@ curves	Smooth	スムーズ
 	Perspective Warp: {error}	遠近法ワープ：{error}
 	a plane is degenerate (its corners must form a quad)	平面が退化しています（4つの頂点で四角形を形成する必要があります）
 	plane coordinates must be finite	平面の座標には有限の数値を指定してください
+
+# Global Perspective Warp: local perspective-axis dragging
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl：画像の軸、Shift：遠近方向の軸（頂点）

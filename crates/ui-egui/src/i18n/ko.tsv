@@ -3396,3 +3396,6 @@ curves	Smooth	매끄럽게
 	Perspective Warp: {error}	원근 뒤틀기: {error}
 	a plane is degenerate (its corners must form a quad)	평면이 퇴화되었습니다(네 꼭짓점이 사각형을 이루어야 합니다)
 	plane coordinates must be finite	평면 좌표는 유한한 값이어야 합니다
+
+# Global Perspective Warp: local perspective-axis dragging
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl: 이미지 축; Shift: 원근 축(모서리 점)

@@ -4291,3 +4291,6 @@ shape	Appearance	Izgled
 	Perspective Warp: {error}	Perspektivno krivljenje: {error}
 	a plane is degenerate (its corners must form a quad)	ravan je degenerisana (njeni uglovi moraju da obrazuju četvorougao)
 	plane coordinates must be finite	koordinate ravni moraju biti konačne
+
+# Global Perspective Warp: local perspective-axis dragging
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl: ose slike; Shift: ose perspektive (uglovi)

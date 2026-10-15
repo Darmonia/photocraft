@@ -3977,3 +3977,6 @@ curves	Smooth	Vloeiend maken
 	Perspective Warp: {error}	Perspectiefvervorming: {error}
 	a plane is degenerate (its corners must form a quad)	een vlak is gedegenereerd (de hoekpunten moeten een vierhoek vormen)
 	plane coordinates must be finite	vlakcoördinaten moeten eindige waarden hebben
+
+# Global Perspective Warp: local perspective-axis dragging
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl: beeldassen; Shift: perspectiefassen (hoekpunten)
