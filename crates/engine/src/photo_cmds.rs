@@ -287,6 +287,17 @@ pub(crate) struct Blended {
     pub vignette: [f64; 2],
 }
 
+/// A seam-grid edge cell may be narrower or shorter than step. Use its
+/// actual canvas area; otherwise a fully opaque last row or column is
+/// classified as uncovered on odd-sized canvases.
+#[inline]
+fn seam_cell_covered(alpha_sum: f32, canvas_w: usize, canvas_h: usize, step: usize, grid_w: usize, cell: usize) -> bool {
+    let x = (cell % grid_w) * step;
+    let y = (cell / grid_w) * step;
+    let area = (canvas_w - x).min(step) * (canvas_h - y).min(step);
+    alpha_sum / area as f32 > 0.98
+}
+
 /// Gain compensation (+ optional vignetting), seams in `order`, multi-band blending. Inputs are
 /// surfaces already in panorama coordinates with alpha. `geometry` enables vignette removal.
 pub(crate) fn seam_blend(warped: &[Surface], canvas: Rect, order: &[usize], seamless: bool, gains: bool, geometry: Option<BlendGeometry>) -> Blended {
@@ -358,7 +369,7 @@ pub(crate) fn seam_blend(warped: &[Surface], canvas: Rect, order: &[usize], seam
             let (l, a, c) = acc[g];
             if c > 0 {
                 luma[i][g] = l / c as f32;
-                cover[i][g] = a / (s * s) as f32 > 0.98;
+                cover[i][g] = seam_cell_covered(a, cw, chh, s, gw, g);
             }
         }
     }
@@ -917,6 +928,25 @@ pub fn specs() -> Vec<CommandSpec> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn seam_grid_uses_clipped_edge_cell_area() {
+        // 1001 by 7 samples downsample by 2: the last column and row
+        // contain fewer pixels than an interior 2x2 cell.
+        let (w, h, step, gw) = (1001, 7, 2, 501);
+        assert!(seam_cell_covered(4.0, w, h, step, gw, 0));
+        assert!(!seam_cell_covered(3.0, w, h, step, gw, 0));
+
+        // A fully opaque right-edge cell contains two pixels, not four.
+        assert!(seam_cell_covered(2.0, w, h, step, gw, gw - 1));
+        assert!(!seam_cell_covered(1.0, w, h, step, gw, gw - 1));
+
+        // The lower-right corner has one real pixel; the old s*s
+        // denominator would incorrectly mark it uncovered.
+        let last = 3 * gw + (gw - 1);
+        assert!(seam_cell_covered(1.0, w, h, step, gw, last));
+        assert!(!seam_cell_covered(0.5, w, h, step, gw, last));
+    }
 
     /// A textured RGB scene (deterministic blobs on a gradient).
     fn scene(w: usize, h: usize, seed: u64) -> Vec<[f32; 4]> {
