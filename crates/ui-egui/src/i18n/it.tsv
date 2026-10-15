@@ -4316,3 +4316,11 @@ shape	Appearance	Aspetto
 	Inconsistent guides	Guide incompatibili
 	Compatible guides	Guide compatibili
 	Commit global rectification	Applica correzione globale
+
+# Perspective Warp review: interactive geometry and commit feedback
+	Perspective Warp preview belongs to another document	L'anteprima della deformazione prospettica appartiene a un altro documento
+	Perspective Warp: invalid plane; drag ignored	Altera prospettiva: piano non valido; trascinamento ignorato
+	Perspective Warp: no changes to apply	Altera prospettiva: nessuna modifica da applicare
+	Perspective Warp: {error}	Altera prospettiva: {error}
+	a plane is degenerate (its corners must form a quad)	un piano è degenere (i suoi angoli devono formare un quadrilatero)
+	plane coordinates must be finite	le coordinate del piano devono essere finite

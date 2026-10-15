@@ -3954,3 +3954,11 @@ curves	Smooth	Vloeiend maken
 	Inconsistent guides	Onverenigbare hulpkaders
 	Compatible guides	Verenigbare hulpkaders
 	Commit global rectification	Globale correctie toepassen
+
+# Perspective Warp review: interactive geometry and commit feedback
+	Perspective Warp preview belongs to another document	Het voorbeeld van perspectiefvervorming hoort bij een ander document
+	Perspective Warp: invalid plane; drag ignored	Perspectiefvervorming: ongeldig vlak; slepen genegeerd
+	Perspective Warp: no changes to apply	Perspectiefvervorming: geen wijzigingen om toe te passen
+	Perspective Warp: {error}	Perspectiefvervorming: {error}
+	a plane is degenerate (its corners must form a quad)	een vlak is gedegenereerd (de hoekpunten moeten een vierhoek vormen)
+	plane coordinates must be finite	vlakcoördinaten moeten eindige waarden hebben

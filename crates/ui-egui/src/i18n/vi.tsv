@@ -3680,3 +3680,11 @@ curves	Smooth	Làm mượt
 	Inconsistent guides	Khung không tương thích
 	Compatible guides	Khung tương thích
 	Commit global rectification	Áp dụng hiệu chỉnh toàn cục
+
+# Perspective Warp review: interactive geometry and commit feedback
+	Perspective Warp preview belongs to another document	Bản xem trước biến dạng phối cảnh thuộc về một tài liệu khác
+	Perspective Warp: invalid plane; drag ignored	Biến dạng phối cảnh: mặt phẳng không hợp lệ; đã bỏ qua thao tác kéo
+	Perspective Warp: no changes to apply	Biến dạng phối cảnh: không có thay đổi nào để áp dụng
+	Perspective Warp: {error}	Biến dạng phối cảnh: {error}
+	a plane is degenerate (its corners must form a quad)	một mặt phẳng bị suy biến (các góc phải tạo thành tứ giác)
+	plane coordinates must be finite	tọa độ mặt phẳng phải là giá trị hữu hạn

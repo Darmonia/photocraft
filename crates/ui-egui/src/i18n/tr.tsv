@@ -3925,3 +3925,11 @@ cameraData	Lens	Lens
 	Inconsistent guides	Uyumsuz kılavuzlar
 	Compatible guides	Uyumlu kılavuzlar
 	Commit global rectification	Genel düzeltmeyi uygula
+
+# Perspective Warp review: interactive geometry and commit feedback
+	Perspective Warp preview belongs to another document	Perspektif çarpıtma önizlemesi başka bir belgeye ait
+	Perspective Warp: invalid plane; drag ignored	Perspektif Çarpıtma: geçersiz düzlem; sürükleme yok sayıldı
+	Perspective Warp: no changes to apply	Perspektif Çarpıtma: uygulanacak değişiklik yok
+	Perspective Warp: {error}	Perspektif Çarpıtma: {error}
+	a plane is degenerate (its corners must form a quad)	bir düzlem dejenere olmuş (köşeleri dörtgen oluşturmalıdır)
+	plane coordinates must be finite	düzlem koordinatları sonlu sayılar olmalıdır

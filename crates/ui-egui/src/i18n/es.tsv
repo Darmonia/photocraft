@@ -4157,3 +4157,11 @@ navigator	Zoom	Zoom
 	Inconsistent guides	Guías incompatibles
 	Compatible guides	Guías compatibles
 	Commit global rectification	Aplicar rectificación global
+
+# Perspective Warp review: interactive geometry and commit feedback
+	Perspective Warp preview belongs to another document	La vista previa de deformación de perspectiva pertenece a otro documento
+	Perspective Warp: invalid plane; drag ignored	Deformación de perspectiva: plano no válido; se ignoró el arrastre
+	Perspective Warp: no changes to apply	Deformación de perspectiva: no hay cambios que aplicar
+	Perspective Warp: {error}	Deformación de perspectiva: {error}
+	a plane is degenerate (its corners must form a quad)	un plano es degenerado (sus esquinas deben formar un cuadrilátero)
+	plane coordinates must be finite	las coordenadas del plano deben ser finitas
