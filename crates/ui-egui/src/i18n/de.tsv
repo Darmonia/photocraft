@@ -2768,3 +2768,11 @@ curves	Smooth	Glätten
 @plural	{n} action|{n} actions	{n} Aktion|{n} Aktionen
 	Auto Add/Delete	Autom. hinzuf./löschen
 	ICO is limited to 256 × 256 pixels	ICO ist auf 256 × 256 Pixel begrenzt
+
+# Perspective Warp review: interactive geometry and commit feedback
+	Perspective Warp preview belongs to another document	Die Vorschau der Perspektivverformung gehört zu einem anderen Dokument
+	Perspective Warp: invalid plane; drag ignored	Perspektivisch verkrümmen: Ungültige Ebene; Ziehen ignoriert
+	Perspective Warp: no changes to apply	Perspektivisch verkrümmen: Keine Änderungen anzuwenden
+	Perspective Warp: {error}	Perspektivisch verkrümmen: {error}
+	a plane is degenerate (its corners must form a quad)	Eine Ebene ist degeneriert (ihre Ecken müssen ein Viereck bilden)
+	plane coordinates must be finite	Ebenenkoordinaten müssen endlich sein

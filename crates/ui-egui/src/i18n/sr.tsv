@@ -4201,3 +4201,11 @@ shape	Appearance	Izgled
 	Color Indicates:	Boja označava:
 	Ink Characteristics	Karakteristike mastila
 	Solidity:	Punoća:
+
+# Perspective Warp review: interactive geometry and commit feedback
+	Perspective Warp preview belongs to another document	Pregled perspektivnog krivljenja pripada drugom dokumentu
+	Perspective Warp: invalid plane; drag ignored	Perspektivno krivljenje: nevažeća ravan; prevlačenje je zanemareno
+	Perspective Warp: no changes to apply	Perspektivno krivljenje: nema izmena za primenu
+	Perspective Warp: {error}	Perspektivno krivljenje: {error}
+	a plane is degenerate (its corners must form a quad)	ravan je degenerisana (njeni uglovi moraju da obrazuju četvorougao)
+	plane coordinates must be finite	koordinate ravni moraju biti konačne

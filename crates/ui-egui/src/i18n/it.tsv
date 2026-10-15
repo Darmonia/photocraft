@@ -4090,3 +4090,11 @@ navigator	Zoom	Zoom
 @plural	{n} action|{n} actions	{n} azione|{n} azioni
 	Auto Add/Delete	Aggiungi/elimina automaticamente
 	ICO is limited to 256 × 256 pixels	ICO è limitato a 256 × 256 pixel
+
+# Perspective Warp review: interactive geometry and commit feedback
+	Perspective Warp preview belongs to another document	L'anteprima della deformazione prospettica appartiene a un altro documento
+	Perspective Warp: invalid plane; drag ignored	Altera prospettiva: piano non valido; trascinamento ignorato
+	Perspective Warp: no changes to apply	Altera prospettiva: nessuna modifica da applicare
+	Perspective Warp: {error}	Altera prospettiva: {error}
+	a plane is degenerate (its corners must form a quad)	un piano è degenere (i suoi angoli devono formare un quadrilatero)
+	plane coordinates must be finite	le coordinate del piano devono essere finite

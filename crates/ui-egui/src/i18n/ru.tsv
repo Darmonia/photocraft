@@ -3071,3 +3071,11 @@ curves	Smooth	Сгладить
 @plural	{n} action|{n} actions	{n} операция|{n} операции|{n} операций
 	Auto Add/Delete	Автодобавление/удаление
 	ICO is limited to 256 × 256 pixels	ICO ограничен размером 256 × 256 пикселей
+
+# Perspective Warp review: interactive geometry and commit feedback
+	Perspective Warp preview belongs to another document	Предварительный просмотр перспективной деформации относится к другому документу
+	Perspective Warp: invalid plane; drag ignored	Перспективная деформация: недопустимая плоскость; перетаскивание отклонено
+	Perspective Warp: no changes to apply	Перспективная деформация: нет изменений для применения
+	Perspective Warp: {error}	Перспективная деформация: {error}
+	a plane is degenerate (its corners must form a quad)	плоскость вырождена (её углы должны образовывать четырёхугольник)
+	plane coordinates must be finite	координаты плоскости должны быть конечными

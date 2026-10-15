@@ -3823,3 +3823,11 @@ curves	Smooth	Εξομάλυνση
 @plural	{n} action|{n} actions	{n} ενέργεια|{n} ενέργειες
 	Auto Add/Delete	Αυτόματη προσθήκη/διαγραφή
 	ICO is limited to 256 × 256 pixels	Το ICO περιορίζεται σε 256 × 256 εικονοστοιχεία
+
+# Perspective Warp review: interactive geometry and commit feedback
+	Perspective Warp preview belongs to another document	Η προεπισκόπηση παραμόρφωσης προοπτικής ανήκει σε άλλο έγγραφο
+	Perspective Warp: invalid plane; drag ignored	Παραμόρφωση προοπτικής: μη έγκυρο επίπεδο· η μετακίνηση αγνοήθηκε
+	Perspective Warp: no changes to apply	Παραμόρφωση προοπτικής: δεν υπάρχουν αλλαγές για εφαρμογή
+	Perspective Warp: {error}	Παραμόρφωση προοπτικής: {error}
+	a plane is degenerate (its corners must form a quad)	ένα επίπεδο είναι εκφυλισμένο (οι κορυφές του πρέπει να σχηματίζουν τετράπλευρο)
+	plane coordinates must be finite	οι συντεταγμένες του επιπέδου πρέπει να είναι πεπερασμένες

@@ -2719,3 +2719,11 @@ curves	Smooth	平滑
 @plural	{n} action|{n} actions	{n} 個動作
 	Auto Add/Delete	自動增加/刪除
 	ICO is limited to 256 × 256 pixels	ICO 最大為 256 × 256 像素
+
+# Perspective Warp review: interactive geometry and commit feedback
+	Perspective Warp preview belongs to another document	透視彎曲預覽屬於另一份文件
+	Perspective Warp: invalid plane; drag ignored	透視彎曲：平面無效，已忽略拖曳
+	Perspective Warp: no changes to apply	透視彎曲：沒有可套用的變更
+	Perspective Warp: {error}	透視彎曲：{error}
+	a plane is degenerate (its corners must form a quad)	平面已退化（四個角點必須構成四邊形）
+	plane coordinates must be finite	平面座標必須是有限數值
