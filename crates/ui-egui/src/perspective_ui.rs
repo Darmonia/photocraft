@@ -115,6 +115,19 @@ impl PerspSession {
             }
         }
     }
+
+    /// Mouse edits are an atomic geometry transaction. An invalid candidate must never
+    /// make the preview silently fall back to the unwarped (identity) grid.
+    fn set_corner_if_valid(&mut self, group: &[(usize, usize)], p: [f64; 2]) -> bool {
+        let previous = self.planes.clone();
+        self.set_corner(group, p);
+        if validate_planes(&self.planes).is_err() {
+            self.planes = previous;
+            false
+        } else {
+            true
+        }
+    }
 }
 
 /// A preview belongs to the document that supplied its pixels, not necessarily the active tab.
@@ -160,17 +173,18 @@ pub fn begin(app: &mut PhotocraftApp, ctx: &egui::Context, command: &str) -> Res
 /// successful commit to an agent, and the editable preview survives failure.
 pub fn commit(app: &mut PhotocraftApp) -> Result<Value, String> {
     if app.distort.perspective.as_ref().is_some_and(|s| !bound_to_active_document(app, s)) {
-        let error = "Perspective Warp preview belongs to another document";
-        app.ui.status = error.into();
-        return Err(error.into());
+        let error = tl!("Perspective Warp preview belongs to another document").to_string();
+        app.ui.status = error.clone();
+        return Err(error);
     }
     let Some(s) = app.distort.perspective.take() else {
-        return Err("Perspective Warp is not active".into());
+        return Err(tl!("Perspective Warp is not active").into());
     };
     if s.planes.is_empty() {
         return Ok(json!({"committed": false, "reason": "noPlanes"}));
     }
     if let Err(error) = validate_planes(&s.planes) {
+        app.ui.status = error.clone();
         app.distort.perspective = Some(s);
         return Err(error);
     }
@@ -180,7 +194,7 @@ pub fn commit(app: &mut PhotocraftApp) -> Result<Value, String> {
     match app.run(&s.command, json!({"planes": s.planes.clone(), "layer": s.layer.0})) {
         Ok(result) => Ok(json!({"committed": true, "result": result})),
         Err(error) => {
-            app.ui.status = format!("Perspective Warp: {error}");
+            app.ui.status = crate::i18n::fmt(tl!("Perspective Warp: {error}"), &[("error", &error)]);
             app.distort.perspective = Some(s);
             Err(error)
         }
@@ -190,10 +204,10 @@ pub fn commit(app: &mut PhotocraftApp) -> Result<Value, String> {
 /// Validate an agent-supplied preview before mutating the UI state.
 fn validate_planes(planes: &[Plane]) -> Result<(), String> {
     if planes.iter().flat_map(|p| p.src.iter().chain(p.dst.iter())).any(|point| point.iter().any(|v| !v.is_finite())) {
-        return Err("plane coordinates must be finite".into());
+        return Err(tl!("plane coordinates must be finite").into());
     }
     if !planes.is_empty() && PerspectiveMap::new(planes).is_none() {
-        return Err("a plane is degenerate (its corners must form a quad)".into());
+        return Err(tl!("a plane is degenerate (its corners must form a quad)").into());
     }
     Ok(())
 }
@@ -218,7 +232,7 @@ pub fn control(app: &mut PhotocraftApp, ui: &Value) -> Result<Value, String> {
     }
     // A stale preview belongs to its original document even if an agent switches tabs.
     if app.distort.perspective.as_ref().is_some_and(|s| !bound_to_active_document(app, s)) {
-        return Err("Perspective Warp preview belongs to another document".into());
+        return Err(tl!("Perspective Warp preview belongs to another document").into());
     }
     // Parse every requested field before changing the session. A malformed request should
     // never partly switch modes, discard a corner drag or silently produce an identity preview.
@@ -261,6 +275,7 @@ pub fn control(app: &mut PhotocraftApp, ui: &Value) -> Result<Value, String> {
 pub fn pointer(app: &mut PhotocraftApp, ev: ToolEvent, _mods: egui::Modifiers) {
     let tol = crate::distort_ui::tolerance(app);
     let Some(s) = app.distort.perspective.as_mut() else { return };
+    let mut rejected = false;
     match ev {
         ToolEvent::Down { x, y, .. } => {
             let p = [x, y];
@@ -282,9 +297,12 @@ pub fn pointer(app: &mut PhotocraftApp, ev: ToolEvent, _mods: egui::Modifiers) {
                 if s.mode == PerspMode::Layout {
                     q = s.snap(q, tol, &group);
                 }
-                s.set_corner(&group, q);
-                if s.mode == PerspMode::Warp {
-                    s.update_grid();
+                if s.set_corner_if_valid(&group, q) {
+                    if s.mode == PerspMode::Warp {
+                        s.update_grid();
+                    }
+                } else {
+                    rejected = true;
                 }
             }
             None => {}
@@ -308,12 +326,30 @@ pub fn pointer(app: &mut PhotocraftApp, ev: ToolEvent, _mods: egui::Modifiers) {
                     if s.mode == PerspMode::Layout {
                         q = s.snap(q, tol, &group);
                     }
-                    s.set_corner(&group, q);
+                    if !s.set_corner_if_valid(&group, q) {
+                        rejected = true;
+                    }
                 }
                 None => {}
             }
             s.update_grid();
         }
+    }
+    if rejected {
+        app.ui.status = tl!("Perspective Warp: invalid plane; drag ignored").into();
+    }
+}
+
+/// Shared by the checkmark and Enter: never drop an interactive commit error.
+pub fn commit_from_ui(app: &mut PhotocraftApp) {
+    match commit(app) {
+        Err(error) => {
+            app.ui.status = crate::i18n::fmt(tl!("Perspective Warp: {error}"), &[("error", &error)]);
+        }
+        Ok(result) if result["committed"] == false => {
+            app.ui.status = tl!("Perspective Warp: no changes to apply").into();
+        }
+        Ok(_) => {}
     }
 }
 
@@ -391,7 +427,7 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             .on_hover_text(crate::i18n::fmt(tl!("Commit Perspective Warp ({key})"), &[("key", &crate::shortcuts::pretty("Enter"))]))
             .clicked()
         {
-            let _ = commit(app);
+            commit_from_ui(app);
         } else if crate::widgets::secondary_button(ui, "⊘", 32.0).on_hover_text(tl!("Cancel (Esc)")).clicked() {
             app.distort.perspective = None;
         }
@@ -595,5 +631,87 @@ mod agent_control_tests {
         let mut bad = valid_plane();
         bad.dst[0][0] = f64::NAN;
         assert!(validate_planes(&[bad]).unwrap_err().contains("finite"));
+    }
+
+    /// Review #5173: an invalid interactive Warp gesture must not turn the preview
+    /// into the identity grid or silently accept a self-crossing quadrilateral.
+    #[test]
+    fn interactive_warp_rejects_crossing_corner_and_preserves_mesh() {
+        let mut app = open_session();
+        control(&mut app, &json!({"mode": "warp", "planes": [valid_plane()]})).unwrap();
+        let start = [12.0, 10.0];
+        let invalid = [70.0, 70.0];
+        let mut crossed = valid_plane();
+        crossed.dst[0] = invalid;
+        assert!(validate_planes(&[crossed]).is_err(), "test target must be invalid");
+        let (before_planes, before_mesh) = {
+            let session = app.distort.perspective.as_ref().unwrap();
+            (session.describe(), session.grid.clone())
+        };
+        let past = app.session.active().unwrap().history.past_len();
+        pointer(&mut app, ToolEvent::Down { x: start[0], y: start[1], pressure: 1.0 }, egui::Modifiers::NONE);
+        pointer(&mut app, ToolEvent::Move { x: invalid[0], y: invalid[1], pressure: 1.0 }, egui::Modifiers::NONE);
+        assert_eq!(app.distort.perspective.as_ref().unwrap().describe(), before_planes, "invalid move must not mutate planes");
+        assert_eq!(app.distort.perspective.as_ref().unwrap().grid, before_mesh, "invalid move must keep the last valid grid");
+        pointer(&mut app, ToolEvent::Up { x: invalid[0], y: invalid[1] }, egui::Modifiers::NONE);
+        assert_eq!(app.distort.perspective.as_ref().unwrap().describe(), before_planes, "invalid release must not mutate planes");
+        assert_eq!(app.distort.perspective.as_ref().unwrap().grid, before_mesh, "invalid release must not reset preview");
+        assert_eq!(app.session.active().unwrap().history.past_len(), past, "drag must not commit history");
+    }
+
+    #[test]
+    fn interactive_warp_accepts_valid_corner_edit() {
+        let mut app = open_session();
+        control(&mut app, &json!({"mode": "warp", "planes": [valid_plane()]})).unwrap();
+        pointer(&mut app, ToolEvent::Down { x: 12.0, y: 10.0, pressure: 1.0 }, egui::Modifiers::NONE);
+        pointer(&mut app, ToolEvent::Move { x: 16.0, y: 14.0, pressure: 1.0 }, egui::Modifiers::NONE);
+        pointer(&mut app, ToolEvent::Up { x: 16.0, y: 14.0 }, egui::Modifiers::NONE);
+        let session = app.distort.perspective.as_ref().unwrap();
+        assert_eq!(session.planes[0].dst[0], [16.0, 14.0]);
+        assert!(PerspectiveMap::new(&session.planes).is_some());
+    }
+
+    #[test]
+    fn enter_shows_invalid_warp_commit_error_and_keeps_editable_preview() {
+        let mut app = open_session();
+        control(&mut app, &json!({"mode": "warp", "planes": [valid_plane()]})).unwrap();
+        app.distort.perspective.as_mut().unwrap().planes[0].dst = [[9.0, 9.0]; 4];
+        let history = app.session.active().unwrap().history.past_len();
+        let ctx = egui::Context::default();
+        ctx.begin_pass(egui::RawInput {
+            events: vec![egui::Event::Key { key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }],
+            ..Default::default()
+        });
+        assert!(crate::distort_ui::keys(&mut app, &ctx));
+        ctx.end_pass().textures_delta.clear();
+        assert!(app.ui.status.contains("degenerate"), "Enter must display the failure: {}", app.ui.status);
+        assert!(app.distort.perspective.is_some());
+        assert_eq!(app.session.active().unwrap().history.past_len(), history);
+    }
+
+    #[test]
+    fn checkmark_handler_displays_engine_failure_and_keeps_preview() {
+        let mut app = open_session();
+        control(&mut app, &json!({"mode": "warp", "planes": [valid_plane()]})).unwrap();
+        app.distort.perspective.as_mut().unwrap().command = "unrecognized.perspective.command".into();
+        let before = app.session.active().unwrap().history.past_len();
+        commit_from_ui(&mut app);
+        assert!(app.ui.status.contains("Perspective Warp:"));
+        assert!(app.distort.perspective.is_some(), "checkmark error must preserve preview");
+        assert_eq!(app.session.active().unwrap().history.past_len(), before);
+    }
+
+    #[test]
+    fn invalid_interactive_commit_surfaces_error_and_keeps_preview() {
+        let mut app = open_session();
+        control(&mut app, &json!({"mode": "warp", "planes": [valid_plane()]})).unwrap();
+        // Direct mutation simulates an outdated document/invalid preview while the user
+        // presses Enter or the checkmark, irrespective of the mouse guard.
+        app.distort.perspective.as_mut().unwrap().planes[0].dst = [[9.0, 9.0]; 4];
+        let before_history = app.session.active().unwrap().history.past_len();
+        assert!(commit(&mut app).is_err());
+        assert!(app.ui.status.contains("degenerate"), "interactive user needs the specific failure in the status: {}", app.ui.status);
+        assert!(app.distort.perspective.is_some());
+        assert_eq!(app.session.active().unwrap().history.past_len(), before_history);
     }
 }
