@@ -226,7 +226,7 @@ pub fn keys(app: &mut PhotocraftApp, ctx: &egui::Context) -> bool {
     }
     if app.distort.perspective.is_some() {
         if enter(ctx) {
-            let _ = crate::perspective_ui::commit(app);
+            crate::perspective_ui::commit_from_ui(app);
         } else if esc(ctx) {
             app.distort.perspective = None;
         }
