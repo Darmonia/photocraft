@@ -218,9 +218,9 @@ fn auto_blend(s: &mut Session, p: &Value) -> Result<Value> {
         let surfs: Vec<Surface> =
             ids.iter().map(|id| doc.layer(*id).and_then(|l| l.surface()).cloned().ok_or(EngineError::NoLayer(*id))).collect::<Result<_>>()?;
         let order = seam_order(&surfs, 0);
-        // Seamless Tones and Colors also needs photometric gain compensation;
-        // without it the two ends of a bracket can retain different exposures.
-        let b = seam_blend(&surfs, area, &order, seamless, true, None);
+        // Photometric gain compensation belongs to the seamless-tones option:
+        // a mask-only panorama must leave each original layer's colors intact.
+        let b = seam_blend(&surfs, area, &order, seamless, seamless, None);
         let weights: Vec<Vec<f32>> = b.layers.iter().map(|(_, m)| m.read_region(area)).collect();
         let blended = seamless.then(|| b.composite.read_region(area));
         (weights, blended)
@@ -402,6 +402,20 @@ mod tests {
         }
         assert!(doc.layer(a).unwrap().mask.is_some());
         assert!(doc.layer(b).unwrap().mask.is_some());
+
+        // When Seamless Tones and Colors is OFF, preserve source pixels and
+        // produce only editable source masks: no merged layer or gain change.
+        s.undo();
+        select(&mut s, &[a, b]);
+        let raw = s.execute("edit.autoBlendLayers", json!({"method": "panorama", "seamlessTones": false})).unwrap();
+        assert!(raw["blended"].is_null());
+        let doc = &s.active().unwrap().doc;
+        assert!(doc.layer(a).unwrap().mask.is_some());
+        assert!(doc.layer(b).unwrap().mask.is_some());
+        let left = doc.layer(a).unwrap().surface().unwrap().pixel(12, 45);
+        let right = doc.layer(b).unwrap().surface().unwrap().pixel(164, 45);
+        assert!((left[0] - 0.35).abs() < 1e-5, "left color changed: {left:?}");
+        assert!((right[0] - 0.49).abs() < 1e-5, "right color changed: {right:?}");
     }
 
     #[test]
