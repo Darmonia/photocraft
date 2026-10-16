@@ -542,7 +542,8 @@ fn box_blur1(w: usize, h: usize, v: &[f32], r: usize) -> Vec<f32> {
     pass(&pass(v, true), false)
 }
 
-/// One-hot winner maps: weight 1 for the image with the largest score at each pixel.
+/// One-hot winner maps: weight 1 for the image with the largest valid score at each pixel.
+/// Negative scores signal missing coverage, so pixels with no input remain unclaimed.
 fn winner_take_all(scores: &[Vec<f32>], n: usize) -> Vec<Vec<f32>> {
     let mut out = vec![vec![0.0f32; n]; scores.len()];
     for i in 0..n {
@@ -552,7 +553,9 @@ fn winner_take_all(scores: &[Vec<f32>], n: usize) -> Vec<Vec<f32>> {
                 best = (k, s[i]);
             }
         }
-        if best.1 > f32::MIN {
+        // All inputs can be uncovered at a pixel. The -1 sentinel must not
+        // produce an opaque mask on the first image in those transparent gaps.
+        if best.1 >= 0.0 {
             out[best.0][i] = 1.0;
         }
     }
@@ -664,6 +667,37 @@ mod tests {
         // The seam falls inside the overlap (20..40), near its middle.
         let seam = (0..w).find(|x| wts[1][10 * w + x] == 1.0).unwrap();
         assert!((25..=35).contains(&seam), "{seam}");
+    }
+
+    #[test]
+    fn auto_blend_masks_leave_uncovered_gaps_transparent() {
+        let (w, h) = (24, 12);
+        let mut a = vec![0.0f32; w * h];
+        let mut b = vec![0.0f32; w * h];
+        for y in 0..h {
+            for x in 0..w {
+                if x < 9 {
+                    a[y * w + x] = 1.0;
+                } else if x >= 15 {
+                    b[y * w + x] = 1.0;
+                }
+            }
+        }
+        let pano = panorama_weights(w, h, &[a.clone(), b.clone()]);
+        let focus = stack_weights(w, h, &[vec![0.2; w * h], vec![0.8; w * h]], &[a, b]);
+        for (name, masks) in [("panorama", pano), ("focus stack", focus)] {
+            for y in 0..h {
+                for x in 0..w {
+                    let i = y * w + x;
+                    if (9..15).contains(&x) {
+                        assert_eq!((masks[0][i], masks[1][i]), (0.0, 0.0), "{name} gap ({x}, {y})");
+                    } else {
+                        let expected = if x < 9 { (1.0, 0.0) } else { (0.0, 1.0) };
+                        assert_eq!((masks[0][i], masks[1][i]), expected, "{name} covered ({x}, {y})");
+                    }
+                }
+            }
+        }
     }
 
     fn checker_img(w: usize, h: usize, cell: usize, ch: usize) -> Vec<f32> {
