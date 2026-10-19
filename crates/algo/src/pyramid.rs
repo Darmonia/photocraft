@@ -518,7 +518,18 @@ pub fn fuse_stack(w: usize, h: usize, ch: usize, images: &[&[f32]], luma: &[Vec<
             }
         }
     }
-    collapse(&acc, ch).into_iter().map(|v| v.clamp(0.0, 1.0)).collect()
+    // Reconstructing the Laplacian levels can spread opacity into a gap even
+    // when no selected source covers that pixel. Keep such holes transparent
+    // in the fused result, not only in the editable source-layer masks.
+    let mut out = collapse(&acc, ch);
+    for (i, px) in out.chunks_exact_mut(ch).enumerate() {
+        if alpha.iter().all(|source| source[i] <= 0.0) {
+            px.fill(0.0);
+        } else {
+            px.iter_mut().for_each(|v| *v = v.clamp(0.0, 1.0));
+        }
+    }
+    out
 }
 
 fn box_blur1(w: usize, h: usize, v: &[f32], r: usize) -> Vec<f32> {
@@ -828,6 +839,40 @@ mod tests {
         let new =
             fuse_stack(w, h, ch, &[&a, &b], &[luma_of(w, h, ch, &a), luma_of(w, h, ch, &b)], &[vec![1.0; w * h], vec![1.0; w * h]], StackFusion::default());
         assert!(rms(&new, &sharp) <= rms(&old, &sharp), "new {} old {}", rms(&new, &sharp), rms(&old, &sharp));
+    }
+
+    /// If every source has zero coverage, the fused *pixels* must remain zero,
+    /// not just their editable source-layer masks. Pyramid reconstruction can
+    /// otherwise introduce ghost alpha within a transparent gap.
+    #[test]
+    fn fuse_stack_has_no_alpha_leak_in_uncovered_gap() {
+        let (w, h, ch) = (96, 64, 4);
+        let (mut a, mut b) = (vec![0.0f32; w * h * ch], vec![0.0f32; w * h * ch]);
+        let (mut cover_a, mut cover_b) = (vec![0.0f32; w * h], vec![0.0f32; w * h]);
+        for y in 0..h {
+            for x in 0..w {
+                let i = y * w + x;
+                if x < 40 {
+                    a[i * ch..i * ch + ch].copy_from_slice(&[0.8, 0.2, 0.1, 1.0]);
+                    cover_a[i] = 1.0;
+                } else if x >= 56 {
+                    b[i * ch..i * ch + ch].copy_from_slice(&[0.1, 0.7, 0.3, 1.0]);
+                    cover_b[i] = 1.0;
+                }
+            }
+        }
+        let la = luma_of(w, h, ch, &a);
+        let lb = luma_of(w, h, ch, &b);
+        for halo in [0.0, 2.0] {
+            let result =
+                fuse_stack(w, h, ch, &[&a, &b], &[la.clone(), lb.clone()], &[cover_a.clone(), cover_b.clone()], StackFusion { halo, ..Default::default() });
+            for y in 0..h {
+                for x in 40..56 {
+                    let at = (y * w + x) * ch;
+                    assert!(result[at..at + ch].iter().all(|&v| v == 0.0), "halo {halo} uncovered pixel at ({x},{y}): {:?}", &result[at..at + ch],);
+                }
+            }
+        }
     }
 
     #[test]
