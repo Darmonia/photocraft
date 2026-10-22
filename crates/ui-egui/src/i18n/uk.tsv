@@ -4027,3 +4027,6 @@ curves	Smooth	Згладити
 	Perspective Warp: {error}	Перспективна деформація: {error}
 	a plane is degenerate (its corners must form a quad)	площина вироджена (її кути мають утворювати чотирикутник)
 	plane coordinates must be finite	координати площини мають бути скінченними
+
+# Legacy Perspective Warp linked-edge result
+	Edges linked: {count}	Зв'язані краї: {count}

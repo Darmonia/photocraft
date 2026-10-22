@@ -3316,3 +3316,6 @@ curves	Smooth	Haluskan
 	Perspective Warp: {error}	Distorsi perspektif: {error}
 	a plane is degenerate (its corners must form a quad)	suatu bidang tidak valid (sudut-sudutnya harus membentuk segi empat)
 	plane coordinates must be finite	koordinat bidang harus berupa bilangan berhingga
+
+# Legacy Perspective Warp linked-edge result
+	Edges linked: {count}	Tepi tertaut: {count}

@@ -3918,3 +3918,6 @@ curves	Smooth	Wygładź
 	Perspective Warp: {error}	Wypaczenie perspektywy: {error}
 	a plane is degenerate (its corners must form a quad)	płaszczyzna jest zdegenerowana (jej narożniki muszą tworzyć czworokąt)
 	plane coordinates must be finite	współrzędne płaszczyzny muszą być skończone
+
+# Legacy Perspective Warp linked-edge result
+	Edges linked: {count}	Połączone krawędzie: {count}

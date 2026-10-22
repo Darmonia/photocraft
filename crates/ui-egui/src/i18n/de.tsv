@@ -3327,3 +3327,6 @@ curves	Smooth	Glätten
 	Perspective Warp: {error}	Perspektivisch verkrümmen: {error}
 	a plane is degenerate (its corners must form a quad)	Eine Ebene ist degeneriert (ihre Ecken müssen ein Viereck bilden)
 	plane coordinates must be finite	Ebenenkoordinaten müssen endlich sein
+
+# Legacy Perspective Warp linked-edge result
+	Edges linked: {count}	Verbundene Kanten: {count}

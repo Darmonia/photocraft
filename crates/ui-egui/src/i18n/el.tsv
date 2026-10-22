@@ -4018,3 +4018,6 @@ curves	Smooth	Εξομάλυνση
 	Perspective Warp: {error}	Παραμόρφωση προοπτικής: {error}
 	a plane is degenerate (its corners must form a quad)	ένα επίπεδο είναι εκφυλισμένο (οι κορυφές του πρέπει να σχηματίζουν τετράπλευρο)
 	plane coordinates must be finite	οι συντεταγμένες του επιπέδου πρέπει να είναι πεπερασμένες
+
+# Legacy Perspective Warp linked-edge result
+	Edges linked: {count}	Συνδεδεμένες ακμές: {count}

@@ -4280,3 +4280,6 @@ navigator	Zoom	Zoom
 	Perspective Warp: {error}	Deformación de perspectiva: {error}
 	a plane is degenerate (its corners must form a quad)	un plano es degenerado (sus esquinas deben formar un cuadrilátero)
 	plane coordinates must be finite	las coordenadas del plano deben ser finitas
+
+# Legacy Perspective Warp linked-edge result
+	Edges linked: {count}	Bordes vinculados: {count}

@@ -4234,3 +4234,6 @@ cameraRaw	Yellow	Sárga
 	Perspective Warp: {error}	Perspektivikus torzítás: {error}
 	a plane is degenerate (its corners must form a quad)	egy sík elfajult (sarkainak négyszöget kell alkotniuk)
 	plane coordinates must be finite	a sík koordinátáinak végesnek kell lenniük
+
+# Legacy Perspective Warp linked-edge result
+	Edges linked: {count}	Összekapcsolt élek: {count}

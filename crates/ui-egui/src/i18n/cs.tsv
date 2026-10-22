@@ -3929,3 +3929,6 @@ navigator	Zoom	Zvětšení
 	Perspective Warp: {error}	Perspektivní deformace: {error}
 	a plane is degenerate (its corners must form a quad)	rovina je degenerovaná (její rohy musí tvořit čtyřúhelník)
 	plane coordinates must be finite	souřadnice roviny musí být konečná čísla
+
+# Legacy Perspective Warp linked-edge result
+	Edges linked: {count}	Propojené hrany: {count}

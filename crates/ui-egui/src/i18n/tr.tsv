@@ -4045,3 +4045,6 @@ cameraData	Lens	Lens
 	Perspective Warp: {error}	Perspektif Çarpıtma: {error}
 	a plane is degenerate (its corners must form a quad)	bir düzlem dejenere olmuş (köşeleri dörtgen oluşturmalıdır)
 	plane coordinates must be finite	düzlem koordinatları sonlu sayılar olmalıdır
+
+# Legacy Perspective Warp linked-edge result
+	Edges linked: {count}	Bağlanan kenarlar: {count}

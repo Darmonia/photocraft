@@ -3996,3 +3996,6 @@ curves	Smooth	スムーズ
 	Perspective Warp: {error}	遠近法ワープ：{error}
 	a plane is degenerate (its corners must form a quad)	平面が退化しています（4つの頂点で四角形を形成する必要があります）
 	plane coordinates must be finite	平面の座標には有限の数値を指定してください
+
+# Legacy Perspective Warp linked-edge result
+	Edges linked: {count}	連結した辺: {count}

@@ -3329,3 +3329,6 @@ curves	Smooth	Lisser
 	Perspective Warp: {error}	Déformation de la perspective : {error}
 	a plane is degenerate (its corners must form a quad)	un plan est dégénéré (ses coins doivent former un quadrilatère)
 	plane coordinates must be finite	les coordonnées du plan doivent être finies
+
+# Legacy Perspective Warp linked-edge result
+	Edges linked: {count}	Bords liés : {count}

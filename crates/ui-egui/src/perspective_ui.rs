@@ -221,6 +221,18 @@ fn set_mode(s: &mut PerspSession, m: PerspMode) {
     s.update_grid();
 }
 
+/// Preserve the last valid layout and its preview when straighten would collapse a quad.
+fn straighten_if_valid(s: &mut PerspSession, mode: Straighten) -> Result<(), String> {
+    let previous = s.planes.clone();
+    straighten(&mut s.planes, mode);
+    if let Err(error) = validate_planes(&s.planes) {
+        s.planes = previous;
+        return Err(error);
+    }
+    s.update_grid();
+    Ok(())
+}
+
 /// Control channel: `edit.perspectiveWarp {"ui": {...}}` while the mode is active.
 pub fn control(app: &mut PhotocraftApp, ui: &Value) -> Result<Value, String> {
     if ui.get("commit").and_then(Value::as_bool) == Some(true) {
@@ -341,7 +353,15 @@ pub fn pointer(app: &mut PhotocraftApp, ev: ToolEvent, _mods: egui::Modifiers) {
                         for c in q.iter_mut() {
                             *c = s.snap(*c, tol, &[]);
                         }
-                        s.planes.push(Plane::identity(q));
+                        // Snapping may collapse multiple corners onto a single source point.
+                        // Validate the whole candidate list before replacing the active layout.
+                        let mut candidate = s.planes.clone();
+                        candidate.push(Plane::identity(q));
+                        if validate_planes(&candidate).is_ok() {
+                            s.planes = candidate;
+                        } else {
+                            rejected = true;
+                        }
                     }
                 }
                 Some(Drag::Corner { group, offset }) => {
@@ -434,8 +454,9 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             (tl!("Both"), tl!("Automatically straighten and level"), Straighten::Auto),
         ] {
             if ui.button(tl!(&label)).on_hover_text(tip).clicked() {
-                straighten(&mut s.planes, m);
-                s.update_grid();
+                if let Err(error) = straighten_if_valid(s, m) {
+                    app.ui.status = crate::i18n::fmt(tl!("Perspective Warp: {error}"), &[("error", &error)]);
+                }
             }
         }
     } else {
@@ -445,12 +466,14 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                 Ok(count) => {
                     s.drag = None;
                     s.update_grid();
-                    app.ui.status = format!("Perspective Warp: {count} adjacent edge(s) linked");
+                    let count = count.to_string();
+                    app.ui.status = crate::i18n::fmt(tl!("Edges linked: {count}"), &[("count", &count)]);
                 }
-                Err(error) => app.ui.status = format!("Perspective Warp: {error}"),
+                Err(error) => app.ui.status = crate::i18n::fmt(tl!("Perspective Warp: {error}"), &[("error", &error)]),
             }
         }
-        ui.label(format!("{} linked", linked_edge_count(&s.planes)));
+        let linked = linked_edge_count(&s.planes).to_string();
+        ui.label(crate::i18n::fmt(tl!("Edges linked: {count}"), &[("count", &linked)]));
         if ui.button(tl!("Remove Planes")).clicked() {
             s.planes.clear();
             s.update_grid();
@@ -768,5 +791,61 @@ mod agent_control_tests {
         assert!(app.ui.status.contains("degenerate"), "interactive user needs the specific failure in the status: {}", app.ui.status);
         assert!(app.distort.perspective.is_some());
         assert_eq!(app.session.active().unwrap().history.past_len(), before_history);
+    }
+
+    /// Reviewer #8498: snapping two new corners to one existing corner must not
+    /// leave a degenerate plane in the editable session.
+    #[test]
+    fn snapped_degenerate_new_plane_is_rejected() {
+        let mut app = open_session();
+        let a = Plane::identity([[10.0, 10.0], [50.0, 10.0], [50.0, 50.0], [10.0, 50.0]]);
+        control(&mut app, &json!({"planes": [a]})).unwrap();
+        assert!(crate::distort_ui::tolerance(&app) > 5.4);
+        let (before, grid) = {
+            let s = app.distort.perspective.as_ref().unwrap();
+            (s.describe(), s.grid.clone())
+        };
+        let h = app.session.active().unwrap().history.past_len();
+        pointer(&mut app, ToolEvent::Down { x: 45.0, y: 70.0, pressure: 1.0 }, egui::Modifiers::NONE);
+        pointer(&mut app, ToolEvent::Up { x: 55.0, y: 48.0 }, egui::Modifiers::NONE);
+        let s = app.distort.perspective.as_ref().unwrap();
+        assert_eq!(s.describe(), before, "a snapped collapse must not append a plane");
+        assert_eq!(s.grid, grid, "a rejected plane cannot poison the preview mesh");
+        assert_eq!(app.session.active().unwrap().history.past_len(), h);
+        assert!(app.ui.status.contains("invalid plane"));
+        pointer(&mut app, ToolEvent::Down { x: 70.0, y: 15.0, pressure: 1.0 }, egui::Modifiers::NONE);
+        pointer(&mut app, ToolEvent::Up { x: 90.0, y: 55.0 }, egui::Modifiers::NONE);
+        let s = app.distort.perspective.as_ref().unwrap();
+        assert_eq!(s.planes.len(), 2, "a subsequent valid plane should still work");
+        assert!(validate_planes(&s.planes).is_ok());
+    }
+
+    #[test]
+    fn straighten_that_would_collapse_a_valid_plane_rolls_back() {
+        let mut app = open_session();
+        let plane = Plane { src: [[10.0, 10.0], [50.0, 10.0], [50.0, 50.0], [10.0, 50.0]], dst: [[11.0, -3.0], [-1.0, -4.0], [5.0, 2.0], [11.0, 6.0]] };
+        assert!(validate_planes(std::slice::from_ref(&plane)).is_ok());
+        let mut formerly_mutated = vec![plane.clone()];
+        straighten(&mut formerly_mutated, Straighten::Horizontal);
+        assert!(validate_planes(&formerly_mutated).is_err(), "the old unguarded straighten corrupts valid geometry");
+
+        control(&mut app, &json!({"planes": [plane], "mode": "warp"})).unwrap();
+        let (before, mesh) = {
+            let s = app.distort.perspective.as_ref().unwrap();
+            (s.describe(), s.grid.clone())
+        };
+        let history = app.session.active().unwrap().history.past_len();
+        let s = app.distort.perspective.as_mut().unwrap();
+        assert!(straighten_if_valid(s, Straighten::Horizontal).is_err());
+        assert_eq!(s.describe(), before, "straighten failure must restore original quads");
+        assert_eq!(s.grid, mesh, "straighten failure must preserve last valid preview");
+        assert_eq!(app.session.active().unwrap().history.past_len(), history);
+    }
+
+    #[test]
+    fn linked_edge_count_status_uses_formatted_localized_template() {
+        let label = crate::i18n::fmt(tl!("Edges linked: {count}"), &[("count", "2")]);
+        assert!(label.contains('2'));
+        assert!(!label.contains("{count}"));
     }
 }

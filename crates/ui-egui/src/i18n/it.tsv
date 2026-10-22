@@ -4435,3 +4435,6 @@ shape	Appearance	Aspetto
 	Perspective Warp: {error}	Altera prospettiva: {error}
 	a plane is degenerate (its corners must form a quad)	un piano è degenere (i suoi angoli devono formare un quadrilatero)
 	plane coordinates must be finite	le coordinate del piano devono essere finite
+
+# Legacy Perspective Warp linked-edge result
+	Edges linked: {count}	Bordi collegati: {count}
