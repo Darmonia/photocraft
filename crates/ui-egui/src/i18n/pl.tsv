@@ -3908,3 +3908,19 @@ curves	Smooth	Wygładź
 
 # Graphics Adapter preference (#1885)
 	GPU adapter	Karta GPU
+
+# Global rectification guide UI and V3.2 local axis lock
+	Global Perspective Warp	Globalna korekcja perspektywy
+	Global V3: draw independent guides on doors and windows, then rectify the whole photo	Global V3: narysuj niezależne ramki na drzwiach i oknach, a następnie wyprostuj całe zdjęcie
+	One global transform; guides are not image regions	Jedna globalna transformacja; ramki nie są obszarami obrazu
+	Edit guides	Edytuj ramki
+	Rectify globally	Wyprostuj globalnie
+	Delete guide	Usuń ramkę
+	Fit whole photo	Dopasuj całe zdjęcie
+	Global aspect	Globalne proporcje
+	Guide weight	Waga ramki
+	True proportions require a known measurement	Rzeczywiste proporcje wymagają znanego wymiaru
+	Inconsistent guides	Niezgodne ramki
+	Compatible guides	Zgodne ramki
+	Commit global rectification	Zastosuj globalną korekcję
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl: osie obrazu; Shift: osie perspektywy (narożniki)

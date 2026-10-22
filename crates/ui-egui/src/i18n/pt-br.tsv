@@ -4098,3 +4098,19 @@ layerLabel	No Color	Sem cor
 
 # Graphics Adapter preference (#1885)
 	GPU adapter	Adaptador de GPU
+
+# Global rectification guide UI and V3.2 local axis lock
+	Global Perspective Warp	Correção global de perspectiva
+	Global V3: draw independent guides on doors and windows, then rectify the whole photo	Global V3: desenhe guias independentes em portas e janelas e retifique a foto inteira
+	One global transform; guides are not image regions	Uma transformação global; as guias não são regiões da imagem
+	Edit guides	Editar guias
+	Rectify globally	Retificar globalmente
+	Delete guide	Excluir guia
+	Fit whole photo	Ajustar a foto inteira
+	Global aspect	Proporções globais
+	Guide weight	Peso da guia
+	True proportions require a known measurement	As proporções reais exigem uma medida conhecida
+	Inconsistent guides	Guias incompatíveis
+	Compatible guides	Guias compatíveis
+	Commit global rectification	Aplicar retificação global
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl: eixos da imagem; Shift: eixos de perspectiva (cantos)

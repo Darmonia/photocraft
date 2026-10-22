@@ -3919,3 +3919,19 @@ navigator	Zoom	Zvětšení
 
 # Graphics Adapter preference (#1885)
 	GPU adapter	Adaptér GPU
+
+# Global rectification guide UI and V3.2 local axis lock
+	Global Perspective Warp	Globální korekce perspektivy
+	Global V3: draw independent guides on doors and windows, then rectify the whole photo	Global V3: nakreslete nezávislé vodicí rámečky na dveře a okna a narovnejte celou fotografii
+	One global transform; guides are not image regions	Jedna globální transformace; rámečky nejsou oblasti obrázku
+	Edit guides	Upravit rámečky
+	Rectify globally	Narovnat globálně
+	Delete guide	Smazat rámeček
+	Fit whole photo	Přizpůsobit celou fotografii
+	Global aspect	Globální proporce
+	Guide weight	Váha rámečku
+	True proportions require a known measurement	Skutečné proporce vyžadují známý rozměr
+	Inconsistent guides	Neslučitelné rámečky
+	Compatible guides	Slučitelné rámečky
+	Commit global rectification	Použít globální korekci
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl: osy obrazu; Shift: perspektivní osy (rohy)

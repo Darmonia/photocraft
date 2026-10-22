@@ -4096,6 +4096,10 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
         });
         if panning {
             // The fist set with the pan above stays (#2196).
+        } else if let Some(cursor) =
+            response.hover_pos().and_then(|p| crate::global_perspective_ui::hover_cursor(app, xf.to_doc(p), crate::distort_ui::tolerance(app)))
+        {
+            ui.ctx().set_cursor_icon(cursor);
         } else if let Some((vertical, _)) = guide_hover {
             ui.ctx().set_cursor_icon(crate::rulers::guide_cursor(&xf, vertical));
         } else if let Some(p) = response.hover_pos()

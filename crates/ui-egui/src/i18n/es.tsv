@@ -4270,3 +4270,19 @@ navigator	Zoom	Zoom
 
 # Graphics Adapter preference (#1885)
 	GPU adapter	Adaptador de GPU
+
+# Global rectification guide UI and V3.2 local axis lock
+	Global Perspective Warp	Corrección global de perspectiva
+	Global V3: draw independent guides on doors and windows, then rectify the whole photo	Global V3: dibuje guías independientes en puertas y ventanas y rectifique toda la foto
+	One global transform; guides are not image regions	Una transformación global; las guías no son regiones de la imagen
+	Edit guides	Editar guías
+	Rectify globally	Rectificar globalmente
+	Delete guide	Eliminar guía
+	Fit whole photo	Ajustar toda la foto
+	Global aspect	Proporciones globales
+	Guide weight	Peso de la guía
+	True proportions require a known measurement	Las proporciones reales requieren una medida conocida
+	Inconsistent guides	Guías incompatibles
+	Compatible guides	Guías compatibles
+	Commit global rectification	Aplicar rectificación global
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl: ejes de la imagen; Mayús: ejes de perspectiva (esquinas)

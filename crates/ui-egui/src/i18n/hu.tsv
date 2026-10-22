@@ -4224,3 +4224,19 @@ cameraRaw	Yellow	Sárga
 
 # Graphics Adapter preference (#1885)
 	GPU adapter	GPU-adapter
+
+# Global rectification guide UI and V3.2 local axis lock
+	Global Perspective Warp	Globális perspektívakorrekció
+	Global V3: draw independent guides on doors and windows, then rectify the whole photo	Global V3: rajzoljon független segédkereteket az ajtókra és ablakokra, majd egyenesítse ki a teljes fényképet
+	One global transform; guides are not image regions	Egy globális transzformáció; a segédkeretek nem képrégiók
+	Edit guides	Segédkeretek szerkesztése
+	Rectify globally	Globális kiegyenesítés
+	Delete guide	Segédkeret törlése
+	Fit whole photo	Teljes fénykép illesztése
+	Global aspect	Globális arányok
+	Guide weight	Segédkeret súlya
+	True proportions require a known measurement	A valódi arányokhoz ismert méret szükséges
+	Inconsistent guides	Összeférhetetlen segédkeretek
+	Compatible guides	Összeférhető segédkeretek
+	Commit global rectification	Globális korrekció alkalmazása
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl: képtengelyek; Shift: perspektívatengelyek (sarkok)
