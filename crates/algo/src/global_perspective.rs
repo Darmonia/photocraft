@@ -64,8 +64,10 @@ pub struct GuideResult {
     pub id: u64,
     pub enabled: bool,
     pub used: bool,
-    pub max_error_deg: f64,
-    pub transformed_corners: [[f64; 2]; 4],
+    /// Only a guide used in the final fit receives residual diagnostics.
+    pub max_error_deg: Option<f64>,
+    /// An unused or disabled guide must not project into the unsafe off-canvas domain.
+    pub transformed_corners: Option<[[f64; 2]; 4]>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -340,7 +342,7 @@ pub fn solve(guides: &[Guide], bounds: Rect, options: &Options) -> Result<Soluti
     // An off-canvas guide could cross a projective horizon outside the image.
     // Keep user controls permissive, but never expose non-finite previews or
     // diagnostics from an unsafe extrapolation of H beyond its safe domain.
-    for g in guides {
+    for g in guides.iter().filter(|g| used.contains(&g.id)) {
         let transformed = mapped(&h, &g.corners);
         if transformed.iter().flatten().any(|x| !x.is_finite() || x.abs() > 1_000_000.0) {
             return Err(format!("guide {} projects outside the safe preview domain", g.id));
@@ -349,16 +351,19 @@ pub fn solve(guides: &[Guide], bounds: Rect, options: &Options) -> Result<Soluti
     let rejected: Vec<u64> = active.iter().filter(|g| !used.contains(&g.id)).map(|g| g.id).collect();
     let mut results: Vec<GuideResult> = guides
         .iter()
-        .map(|g| GuideResult {
-            id: g.id,
-            enabled: g.enabled,
-            used: g.enabled && used.contains(&g.id),
-            max_error_deg: residual(&h, g),
-            transformed_corners: mapped(&h, &g.corners),
+        .map(|g| {
+            let used_guide = g.enabled && used.contains(&g.id);
+            GuideResult {
+                id: g.id,
+                enabled: g.enabled,
+                used: used_guide,
+                max_error_deg: used_guide.then(|| residual(&h, g)),
+                transformed_corners: used_guide.then(|| mapped(&h, &g.corners)),
+            }
         })
         .collect();
     results.sort_by_key(|g| g.id);
-    let max_error = results.iter().filter(|g| g.used).map(|g| g.max_error_deg).fold(0.0_f64, f64::max);
+    let max_error = results.iter().filter_map(|g| g.max_error_deg).fold(0.0_f64, f64::max);
     let mut warnings = vec!["Aspect ratio is not physically calibrated; apparent central proportions are preserved.".into()];
     if active.len() == 1 {
         warnings.push("Only one guide: no independent consistency check is possible.".into());
@@ -457,6 +462,40 @@ mod tests {
         assert_eq!(a.matrix, b.matrix);
         assert_eq!(b.guides.len(), 7);
     }
+    /// Reviewer #8497: a disabled guide far away at the projective horizon
+    /// is valid input but must never veto a matrix fitted exclusively to active guides.
+    #[test]
+    fn disabled_near_horizon_guide_does_not_reject_valid_global_solution() {
+        let (bounds, mut guides) = fixture();
+        let original = solve(&guides, bounds, &Options::default()).unwrap();
+        let h = original.homography();
+        let (a, b, c) = (h.0[6], h.0[7], h.0[8]);
+        assert!(a.abs().max(b.abs()) > 1e-9, "fixture must produce a projective horizon");
+        let near_horizon = if a.abs() >= b.abs() {
+            let x = (-c - b * 25.0) / a;
+            [[x, 25.0], [x + 20.0, 25.0], [x + 20.0, 45.0], [x, 45.0]]
+        } else {
+            let y = (-c - a * 25.0) / b;
+            [[25.0, y], [45.0, y], [45.0, y + 20.0], [25.0, y + 20.0]]
+        };
+        let disabled = Guide { enabled: false, ..guide(999, near_horizon) };
+        assert!(validate_guides(std::slice::from_ref(&disabled)).is_ok());
+        let projected = mapped(&h, &disabled.corners);
+        assert!(
+            projected.iter().flatten().any(|v| !v.is_finite() || v.abs() > 1_000_000.0),
+            "the disabled guide must reproduce the previous unsafe extrapolation gate: {projected:?}"
+        );
+        guides.push(disabled);
+        let actual = solve(&guides, bounds, &Options::default()).unwrap();
+        assert_eq!(actual.matrix, original.matrix, "disabled guide cannot change accepted homography");
+        assert_eq!(actual.used_guide_ids, original.used_guide_ids);
+        assert_eq!(actual.guides.len(), 7);
+        let unused = actual.guides.iter().find(|g| g.id == 999).unwrap();
+        assert!(!unused.used && !unused.enabled);
+        assert_eq!(unused.max_error_deg, None);
+        assert_eq!(unused.transformed_corners, None);
+    }
+
     #[test]
     fn a_single_quad_rectifies_but_is_not_metric_calibration() {
         let (r, g) = fixture();
@@ -546,7 +585,7 @@ mod tests {
         let g = [guide(1, [[-35.0, -12.0], [75.0, -12.0], [75.0, 140.0], [-35.0, 140.0]])];
         let solution = solve(&g, r, &Options::default()).unwrap();
         assert!(solution.min_jacobian > 0.0);
-        assert!(solution.guides[0].transformed_corners.iter().flatten().all(|v| v.is_finite()));
+        assert!(solution.guides[0].transformed_corners.as_ref().unwrap().iter().flatten().all(|v| v.is_finite()));
         assert_eq!(solution.source_bounds, [0.0, 0.0, 300.0, 200.0]);
     }
     #[test]
@@ -579,7 +618,7 @@ mod tests {
         let b = solve(&g, r, &Options::default()).unwrap();
         assert_ne!(a.matrix, b.matrix);
         assert_eq!(a.used_guide_ids, b.used_guide_ids);
-        assert!(b.guides[0].max_error_deg < a.guides[0].max_error_deg);
+        assert!(b.guides[0].max_error_deg.unwrap() < a.guides[0].max_error_deg.unwrap());
     }
     #[test]
     fn nearly_affine_vanishing_points_need_no_division_by_infinity() {
