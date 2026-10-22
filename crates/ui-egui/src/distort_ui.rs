@@ -36,7 +36,12 @@ pub struct Distort {
 
 impl Distort {
     pub fn active(&self) -> bool {
-        self.liquify.is_some() || self.caf.is_some() || self.puppet.is_some() || self.perspective.is_some() || self.global_perspective.is_some() || self.vanishing.is_some()
+        self.liquify.is_some()
+            || self.caf.is_some()
+            || self.puppet.is_some()
+            || self.perspective.is_some()
+            || self.global_perspective.is_some()
+            || self.vanishing.is_some()
     }
 
     /// Short description for `ui.inspect`.
