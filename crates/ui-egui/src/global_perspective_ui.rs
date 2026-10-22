@@ -235,7 +235,7 @@ impl GlobalSession {
 }
 
 pub fn bound_to_active_document(app: &PhotocraftApp, s: &GlobalSession) -> bool {
-    app.session.active().is_some_and(|st| st.doc.id == s.source_doc.id)
+    app.session.active().is_some_and(|st| st.doc.id == s.source_doc.id && Arc::ptr_eq(&st.doc, &s.source_doc))
 }
 fn validate_session(app: &PhotocraftApp) -> Result<(), String> {
     let s = app.distort.global_perspective.as_ref().ok_or("Global Perspective Warp is not active")?;
@@ -251,13 +251,19 @@ fn validate_session(app: &PhotocraftApp) -> Result<(), String> {
 }
 
 pub fn begin(app: &mut PhotocraftApp, ctx: &egui::Context) -> Result<(), String> {
-    if app.ui.transform.is_some() || app.distort.active() || app.distort.gallery.is_some() {
+    if app.ui.transform.is_some() || app.ui.symmetry_transform.is_some() || app.distort.active() || app.distort.gallery.is_some() {
         return Err("finish or cancel the current transformation first".into());
     }
     let (layer, surface, _) = crate::distort_ui::active_pixels(app)?;
     let bounds = validate_target(&app.session, layer)?;
     let st = app.session.active().ok_or("no document")?;
     let l = st.doc.layer(layer).ok_or("no layer")?;
+    // A raw mesh cannot render layer styles: removing the original would also
+    // remove its shadow/stroke, while commit retains those effects. Fail closed
+    // rather than showing a preview that disagrees with the committed image.
+    if l.effects.enabled && (l.effects.items.iter().any(photocraft_doc::Effect::enabled) || l.effects.psd_raw.is_some()) {
+        return Err("Global Perspective Warp preview cannot represent active layer effects; disable or rasterize the effects first".into());
+    }
     let source_doc = st.doc.clone();
     let preview_doc = crate::distort_ui::without_layer(&st.doc, layer);
     let opacity = l.opacity * l.fill_opacity;
@@ -836,5 +842,76 @@ mod tests {
         pointer(&mut a, ToolEvent::Down { x: 120.0, y: 10.0, pressure: 1.0 }, egui::Modifiers::NONE);
         pointer(&mut a, ToolEvent::Up { x: 150.0, y: 70.0 }, egui::Modifiers::NONE);
         assert_eq!(a.distort.global_perspective.as_ref().unwrap().guides.len(), 2);
+    }
+
+    /// Photoshop parity catalogs must not count a PhotoCraft-only command.
+    #[test]
+    fn global_tool_stays_discoverable_without_inflating_photoshop_parity() {
+        let a = app();
+        let entry = crate::menus::menu_items(&a).into_iter().find(|row| row.id == COMMAND).expect("engine registry command stays visible in Edit menu");
+        assert_eq!(entry.path, ["Edit"]);
+        assert!(!crate::menu_catalog::CATALOG.iter().any(|entry| entry.3 == COMMAND));
+        let parity = crate::parity::compute();
+        assert_eq!((parity.live, parity.total), (631, 631));
+    }
+
+    /// Source Arc changes invalidate the mesh immediately, not only its commit.
+    #[test]
+    fn edited_source_does_not_display_stale_global_preview() {
+        let mut a = app();
+        let active = a.session.active_index().unwrap();
+        assert!(bound_to_active_document(&a, a.distort.global_perspective.as_ref().unwrap()));
+        assert!(crate::distort_ui::display_doc(&a, active).is_some());
+        let source_id = a.session.active().unwrap().doc.id;
+        a.session.execute("layer.new.layer", json!({})).unwrap();
+        assert_eq!(a.session.active().unwrap().doc.id, source_id);
+        assert!(!bound_to_active_document(&a, a.distort.global_perspective.as_ref().unwrap()));
+        assert!(crate::distort_ui::display_doc(&a, active).is_none(), "stale snapshot must not paint over the new source");
+        assert!(commit(&mut a).is_err());
+        assert!(a.distort.global_perspective.is_some(), "source edits must remain safe to cancel");
+    }
+
+    /// A raw texture preview cannot represent Photoshop effects under Fill Opacity.
+    #[test]
+    fn active_effects_cannot_open_a_misleading_raster_preview() {
+        let mut a = app();
+        a.distort.global_perspective = None;
+        a.session
+            .edit("styled fixture", |doc, active| {
+                let layer = doc.layer_mut(active.unwrap()).unwrap();
+                layer.fill_opacity = 0.0;
+                layer.effects.items.push(photocraft_doc::Effect::default_drop_shadow());
+                Ok(())
+            })
+            .unwrap();
+        let old = a.session.active().unwrap().doc.clone();
+        let history = a.session.active().unwrap().history.past_len();
+        let error = begin(&mut a, &egui::Context::default()).unwrap_err();
+        assert!(error.contains("layer effects"), "{error}");
+        assert!(a.distort.global_perspective.is_none());
+        assert!(Arc::ptr_eq(&old, &a.session.active().unwrap().doc));
+        assert_eq!(history, a.session.active().unwrap().history.past_len());
+        a.session
+            .edit("disable style", |doc, active| {
+                doc.layer_mut(active.unwrap()).unwrap().effects.enabled = false;
+                Ok(())
+            })
+            .unwrap();
+        begin(&mut a, &egui::Context::default()).unwrap();
+        assert!(a.distort.global_perspective.is_some());
+    }
+
+    /// Starting a second transform must not discard an uncommitted symmetry edit.
+    #[test]
+    fn global_warp_rejects_active_symmetry_without_cancelling_it() {
+        let mut a = app();
+        a.distort.global_perspective = None;
+        a.ui.tool = crate::state::Tool::Brush;
+        a.session.execute("paint.setSymmetry", json!({"mode":"vertical"})).unwrap();
+        crate::symmetry_ui::begin(&mut a).unwrap();
+        let original = a.ui.symmetry_transform.clone();
+        assert!(begin(&mut a, &egui::Context::default()).is_err());
+        assert_eq!(a.ui.symmetry_transform, original);
+        assert!(a.distort.global_perspective.is_none());
     }
 }
