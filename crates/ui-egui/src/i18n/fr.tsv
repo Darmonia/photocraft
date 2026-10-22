@@ -3319,3 +3319,19 @@ curves	Smooth	Lisser
 
 # Graphics Adapter preference (#1885)
 	GPU adapter	Adaptateur GPU
+
+# Global rectification guide UI and V3.2 local axis lock
+	Global Perspective Warp	Déformation de perspective globale
+	Global V3: draw independent guides on doors and windows, then rectify the whole photo	Global V3 : placez des repères indépendants sur les portes et fenêtres, puis redressez toute la photo
+	One global transform; guides are not image regions	Une seule transformation globale ; les repères ne sont pas des zones d’image
+	Edit guides	Modifier les repères
+	Rectify globally	Redresser globalement
+	Delete guide	Supprimer le repère
+	Fit whole photo	Conserver toute la photo
+	Global aspect	Proportions globales
+	Guide weight	Poids du repère
+	True proportions require a known measurement	Les proportions réelles nécessitent une mesure connue
+	Inconsistent guides	Repères incompatibles
+	Compatible guides	Repères compatibles
+	Commit global rectification	Appliquer le redressement global
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl : axes de l’image ; Maj : axes du repère (coins)

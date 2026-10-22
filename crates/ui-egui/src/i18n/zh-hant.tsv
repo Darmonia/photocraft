@@ -2928,3 +2928,19 @@ curves	Smooth	平滑
 
 # Graphics Adapter preference (#1885)
 	GPU adapter	GPU 介面卡
+
+# Global rectification guide UI and V3.2 local axis lock
+	Global Perspective Warp	全域透視校正
+	Global V3: draw independent guides on doors and windows, then rectify the whole photo	Global V3：在門窗上繪製獨立參考框，然後校正整張照片
+	One global transform; guides are not image regions	只使用一個全域變換；參考框不是影像分區
+	Edit guides	編輯參考框
+	Rectify globally	全域校正
+	Delete guide	刪除參考框
+	Fit whole photo	容納整張照片
+	Global aspect	全域比例
+	Guide weight	參考框權重
+	True proportions require a known measurement	真實比例需要已知尺寸
+	Inconsistent guides	不相容的參考框
+	Compatible guides	相容的參考框
+	Commit global rectification	套用全域校正
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl：影像軸；Shift：透視軸（角點）
