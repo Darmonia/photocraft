@@ -102,7 +102,7 @@ pub fn specs() -> Vec<CommandSpec> {
     vec![CommandSpec {
         id: COMMAND,
         label: "Global Perspective Warp",
-        menu: &["Edit"],
+        menu: &[],
         shortcut: None,
         params: r#"{"guides":[{"id":integer,"corners":[[x,y]x4],"enabled":true,"weight":1}...],"options":{"fitCanvas":true,"aspect":1},"layer":id?,"document":id?,"solveOnly":false,"interpolation":"bicubic|bilinear|nearest"} -- one global homography for the WHOLE raster layer, not per-guide regions. Guide corners TL TR BR BL, up to 128; weight 0.05..20; aspect 0.25..4. Rejects selections, masks and smart objects. solveOnly returns diagnostics without changing the document."#,
         enabled,
