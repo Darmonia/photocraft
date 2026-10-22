@@ -453,10 +453,10 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             (tl!("Level"), tl!("Automatically level near-horizontal line segments"), Straighten::Horizontal),
             (tl!("Both"), tl!("Automatically straighten and level"), Straighten::Auto),
         ] {
-            if ui.button(tl!(&label)).on_hover_text(tip).clicked() {
-                if let Err(error) = straighten_if_valid(s, m) {
-                    app.ui.status = crate::i18n::fmt(tl!("Perspective Warp: {error}"), &[("error", &error)]);
-                }
+            if ui.button(tl!(&label)).on_hover_text(tip).clicked()
+                && let Err(error) = straighten_if_valid(s, m)
+            {
+                app.ui.status = crate::i18n::fmt(tl!("Perspective Warp: {error}"), &[("error", &error)]);
             }
         }
     } else {
@@ -469,7 +469,7 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                     let count = count.to_string();
                     app.ui.status = crate::i18n::fmt(tl!("Edges linked: {count}"), &[("count", &count)]);
                 }
-                Err(error) => app.ui.status = crate::i18n::fmt(tl!("Perspective Warp: {error}"), &[("error", &error)]),
+                Err(error) => app.ui.status = crate::i18n::fmt(tl!("Perspective Warp: {error}"), &[("error", error)]),
             }
         }
         let linked = linked_edge_count(&s.planes).to_string();
