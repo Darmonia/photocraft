@@ -153,9 +153,10 @@ pub fn pointer(app: &mut PhotocraftApp, ev: ToolEvent, mods: egui::Modifiers) ->
         return true;
     }
     if let Some(p) = &app.distort.perspective {
-        if crate::perspective_ui::bound_to_active_document(app, p) {
-            crate::perspective_ui::pointer(app, ev, mods);
+        if !crate::perspective_ui::bound_to_active_document(app, p) {
+            return false;
         }
+        crate::perspective_ui::pointer(app, ev, mods);
         return true;
     }
     if app.distort.vanishing.is_some() {
@@ -320,4 +321,41 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
 pub(crate) fn tolerance(app: &PhotocraftApp) -> f64 {
     let z = app.point_zoom().max(0.01);
     8.0 / f64::from(z)
+}
+
+#[cfg(test)]
+mod unbound_pointer_regression {
+    use super::*;
+
+    #[test]
+    fn unbound_perspective_does_not_consume_other_document_pointer() {
+        let ctx = egui::Context::default();
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        app.session.execute("file.new", json!({"width": 80, "height": 60, "depth": 8})).unwrap();
+        app.session.execute("layer.new.layer", json!({})).unwrap();
+        app.session
+            .edit("paint", |doc, active| {
+                doc.layer_mut(active.unwrap()).unwrap().surface_mut().unwrap().fill_rect(Rect::new(0, 0, 80, 60), &[0.2, 0.5, 0.7, 1.0]);
+                Ok(())
+            })
+            .unwrap();
+        app.sync_views();
+        crate::perspective_ui::begin(&mut app, &ctx, "edit.perspectiveWarp").unwrap();
+        let owner = app.session.active().unwrap().doc.id;
+        assert!(
+            pointer(&mut app, ToolEvent::Move { x: 15.0, y: 15.0, pressure: 1.0 }, egui::Modifiers::NONE),
+            "the bound Perspective editor consumes its own pointer events"
+        );
+
+        app.session.execute("file.new", json!({"width": 50, "height": 40, "depth": 8})).unwrap();
+        app.sync_views();
+        assert_ne!(app.session.active().unwrap().doc.id, owner);
+        assert!(app.distort.perspective.is_some(), "tab switching precedes deferred session cleanup");
+        assert!(!crate::perspective_ui::bound_to_active_document(&app, app.distort.perspective.as_ref().unwrap()));
+        assert!(
+            !pointer(&mut app, ToolEvent::Down { x: 15.0, y: 15.0, pressure: 1.0 }, egui::Modifiers::NONE),
+            "a stale Perspective session must let the active document handle the pointer"
+        );
+        assert!(app.distort.perspective.is_some(), "routing does not implicitly commit or clear the stale editor");
+    }
 }
