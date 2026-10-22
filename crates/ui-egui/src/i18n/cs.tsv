@@ -3919,3 +3919,13 @@ navigator	Zoom	Zvětšení
 
 # Graphics Adapter preference (#1885)
 	GPU adapter	Adaptér GPU
+
+# Legacy Perspective Warp V2 and review fixes
+	Link Edges	Propojit hrany
+	Join matching neighbouring edges within 8 document pixels; preserves other planes	Propojí odpovídající sousední hrany do vzdálenosti 8 pixelů dokumentu; ostatní roviny zůstanou beze změny
+	Perspective Warp preview belongs to another document	Náhled perspektivní deformace patří jinému dokumentu
+	Perspective Warp: invalid plane; drag ignored	Perspektivní deformace: neplatná rovina; tažení ignorováno
+	Perspective Warp: no changes to apply	Perspektivní deformace: žádné změny k použití
+	Perspective Warp: {error}	Perspektivní deformace: {error}
+	a plane is degenerate (its corners must form a quad)	rovina je degenerovaná (její rohy musí tvořit čtyřúhelník)
+	plane coordinates must be finite	souřadnice roviny musí být konečná čísla
