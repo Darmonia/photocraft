@@ -283,9 +283,8 @@ pub fn draw_overlay(app: &PhotocraftApp, painter: &egui::Painter, xf: &ViewXform
 
 /// Options bar for the on-canvas modes. True when drawn.
 pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> bool {
-    if let Some(p) = &app.distort.global_perspective
-        && crate::global_perspective_ui::bound_to_active_document(app, p)
-    {
+    if app.distort.global_perspective.is_some() {
+        // Even if the source Arc is obsolete, keep the visible Cancel action.
         crate::global_perspective_ui::options_bar(app, ui);
         return true;
     }

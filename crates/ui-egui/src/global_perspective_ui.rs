@@ -14,6 +14,8 @@ use std::sync::Arc;
 
 mod local_axes;
 #[cfg(test)]
+mod p2_tests;
+#[cfg(test)]
 mod shift_tests;
 use local_axes::LocalAxes;
 
@@ -52,17 +54,21 @@ enum Drag {
         mouse_start: [f64; 2],
         original: [[f64; 2]; 4],
         axis: Option<Axis>,
+        activation_distance: f64,
     },
 }
 
 /// Ctrl constrains to the dominant drag axis, fixed at the first deliberate movement.
 /// Releasing Ctrl restores free movement; pressing it again determines a new axis.
-fn axis_restrict(delta: [f64; 2], ctrl: bool, locked: Option<Axis>) -> ([f64; 2], Option<Axis>) {
+fn axis_restrict(delta: [f64; 2], ctrl: bool, locked: Option<Axis>, activation_distance: f64) -> ([f64; 2], Option<Axis>) {
     if !ctrl {
         return (delta, None);
     }
+    if !activation_distance.is_finite() || activation_distance < 0.0 || delta.iter().any(|n| !n.is_finite()) {
+        return ([0.0, 0.0], None);
+    }
     let axis = locked.or_else(|| {
-        if delta[0].abs().max(delta[1].abs()) < 2.0 {
+        if delta[0].abs().max(delta[1].abs()) < activation_distance.max(f64::EPSILON) {
             None
         } else if delta[0].abs() >= delta[1].abs() {
             Some(Axis::Horizontal)
@@ -94,17 +100,18 @@ fn distance_to_segment(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> f64 {
 /// Test corners first so an endpoint never accidentally selects its adjoining edge.
 fn hit_handle(s: &GlobalSession, p: [f64; 2], tol: f64) -> Option<Handle> {
     for g in s.guides.iter().rev() {
-        for (corner, raw) in g.corners.iter().enumerate() {
-            let q = s.map(*raw);
+        let Some(corners) = s.display_corners(g) else { continue };
+        for (corner, q) in corners.iter().enumerate() {
             if (q[0] - p[0]).hypot(q[1] - p[1]) <= tol {
                 return Some(Handle::Corner { id: g.id, corner });
             }
         }
     }
     for g in s.guides.iter().rev() {
+        let Some(corners) = s.display_corners(g) else { continue };
         for edge in 0..4 {
-            let a = s.map(g.corners[edge]);
-            let b = s.map(g.corners[(edge + 1) % 4]);
+            let a = corners[edge];
+            let b = corners[(edge + 1) % 4];
             if distance_to_segment(p, a, b) <= tol {
                 return Some(Handle::Edge { id: g.id, edge });
             }
@@ -153,6 +160,17 @@ impl GlobalSession {
         } else {
             p
         }
+    }
+    /// In result mode only solver-validated used guides may be projected.
+    /// Excluded/disabled guides stay in source coordinates, including near the horizon.
+    fn display_corners(&self, guide: &Guide) -> Option<[[f64; 2]; 4]> {
+        let corners = if self.show_result {
+            let report = self.solution.as_ref()?.guides.iter().find(|r| r.id == guide.id)?;
+            if report.used { report.transformed_corners? } else { guide.corners }
+        } else {
+            guide.corners
+        };
+        corners.iter().flatten().all(|v| v.is_finite() && v.abs() <= f32::MAX as f64).then_some(corners)
     }
     fn update_grid(&mut self) {
         let b = self.bounds;
@@ -212,7 +230,7 @@ impl GlobalSession {
                 // Ctrl remains the existing image-axis lock, including when both
                 // modifiers are held. Shift uses the original adjacent edge directions.
                 let (delta, axis, local_axis) = if mods.ctrl {
-                    let (d, a) = axis_restrict(delta, true, axis);
+                    let (d, a) = axis_restrict(delta, true, axis, activation_distance);
                     (d, a, None)
                 } else if mods.shift {
                     let (d, a) = local_axes.map_or(([0.0, 0.0], None), |axes| axes.restrict(delta, local_axis, activation_distance));
@@ -223,11 +241,11 @@ impl GlobalSession {
                 self.move_corner(id, corner, [start[0] + delta[0], start[1] + delta[1]]);
                 self.drag = Some(Drag::Corner { id, corner, offset, start, axis, local_axes, local_axis, activation_distance });
             }
-            Some(Drag::Edge { id, edge, mouse_start, original, axis }) => {
+            Some(Drag::Edge { id, edge, mouse_start, original, axis, activation_distance }) => {
                 let raw = [p[0] - mouse_start[0], p[1] - mouse_start[1]];
-                let (delta, axis) = axis_restrict(raw, mods.ctrl, axis);
+                let (delta, axis) = axis_restrict(raw, mods.ctrl, axis, activation_distance);
                 self.translate_edge(id, edge, original, delta);
-                self.drag = Some(Drag::Edge { id, edge, mouse_start, original, axis });
+                self.drag = Some(Drag::Edge { id, edge, mouse_start, original, axis, activation_distance });
             }
             None => {}
         }
@@ -263,6 +281,22 @@ pub fn begin(app: &mut PhotocraftApp, ctx: &egui::Context) -> Result<(), String>
     // rather than showing a preview that disagrees with the committed image.
     if l.effects.enabled && (l.effects.items.iter().any(photocraft_doc::Effect::enabled) || l.effects.psd_raw.is_some()) {
         return Err("Global Perspective Warp preview cannot represent active layer effects; disable or rasterize the effects first".into());
+    }
+    // The preview is an ordinary alpha-blended mesh ABOVE the composited canvas.
+    // It cannot reproduce non-Normal blending, clipping, advanced blending, nested
+    // groups or foreground layers painted over the source at commit time.
+    let path = st.doc.path_of(layer).ok_or("no target layer path")?;
+    let index = path.first().copied().ok_or("no target layer path")?;
+    if !l.visible
+        || l.blend != photocraft_doc::BlendMode::Normal
+        || l.clipped
+        || l.excluded_channels != 0
+        || !l.blend_if.is_default()
+        || !l.advanced.is_default()
+        || path.len() != 1
+        || st.doc.layers.iter().skip(index.saturating_add(1)).any(|above| above.visible)
+    {
+        return Err("Global Perspective Warp preview requires a visible topmost raster layer with Normal blending and no clipping or advanced blending; flatten incompatible layers first".into());
     }
     let source_doc = st.doc.clone();
     let preview_doc = crate::distort_ui::without_layer(&st.doc, layer);
@@ -457,13 +491,13 @@ pub fn pointer(app: &mut PhotocraftApp, ev: ToolEvent, mods: egui::Modifiers) {
                         Handle::Edge { id, edge } => {
                             let original = s.guides.iter().find(|g| g.id == id).map(|g| g.corners);
                             if let Some(original) = original {
-                                s.drag = Some(Drag::Edge { id, edge, mouse_start: p, original, axis: None });
+                                s.drag = Some(Drag::Edge { id, edge, mouse_start: p, original, axis: None, activation_distance: tol * 0.25 });
                             }
                         }
                     }
                 }
             } else if !mods.shift
-                && let Some(g) = s.guides.iter().rev().find(|g| inside(p, &g.corners.map(|c| s.map(c))))
+                && let Some(g) = s.guides.iter().rev().find(|g| s.display_corners(g).is_some_and(|corners| inside(p, &corners)))
             {
                 s.selected = Some(g.id);
             } else if !s.show_result
@@ -526,7 +560,11 @@ pub fn draw(s: &GlobalSession, painter: &egui::Painter, xf: &ViewXform) {
         } else {
             t.accent
         };
-        let pts: Vec<Pos2> = g.corners.iter().map(|p| scr(s.map(*p))).collect();
+        let Some(corners) = s.display_corners(g) else { continue };
+        let pts: Vec<Pos2> = corners.iter().map(|p| scr(*p)).collect();
+        if pts.iter().any(|p| !p.x.is_finite() || !p.y.is_finite()) {
+            continue;
+        }
         painter.add(egui::Shape::closed_line(pts.clone(), Stroke::new(if s.selected == Some(g.id) { 2.5 } else { 1.3 }, color)));
         for p in &pts {
             painter.circle_filled(*p, 4.5, t.card);
@@ -552,6 +590,16 @@ pub fn draw(s: &GlobalSession, painter: &egui::Painter, xf: &ViewXform) {
 }
 
 pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
+    if let Some(s) = app.distort.global_perspective.as_ref()
+        && !bound_to_active_document(app, s)
+    {
+        // A stale session must never commit, but cancellation must stay visible.
+        if ui.button(tl!("Cancel (Esc)")).clicked() {
+            app.distort.global_perspective = None;
+        }
+        ui.colored_label(crate::theme::Tokens::get(ui.ctx()).warning, "Source changed; reopen Global Perspective Warp");
+        return;
+    }
     let mut do_solve = false;
     let mut do_commit = false;
     let mut do_cancel = false;
