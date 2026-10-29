@@ -1216,6 +1216,9 @@ fn front(app: &mut PhotocraftApp, ctx: &egui::Context, id: &str, params: &Value)
         "file.openExrParts" => open_exr_parts_dialog(app),
         "file.saveACopy" => Some(save_a_copy(app)),
         "file.placeEmbedded" | "file.placeLinked" => {
+            if let Err(e) = crate::transform_tool::reject_during_global_warp(app) {
+                return Some(Err(e));
+            }
             if app.ui.transform.is_some() {
                 return Some(Err("Commit or cancel the transform first".into()));
             }
@@ -1226,6 +1229,9 @@ fn front(app: &mut PhotocraftApp, ctx: &egui::Context, id: &str, params: &Value)
             let linked = id == "file.placeLinked";
             let ctx = ctx.clone();
             Some(app.pick_file_bytes(move |app, name, bytes| {
+                // The picker is asynchronous. Recheck before refocus or placing:
+                // a global edit may have opened since the picker was launched.
+                crate::transform_tool::reject_during_global_warp(app)?;
                 if app.ui.transform.is_some() {
                     return Err("Commit or cancel the transform first".into());
                 }

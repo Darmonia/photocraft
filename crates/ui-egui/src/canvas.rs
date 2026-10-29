@@ -3959,7 +3959,14 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
             if press_stroke {
                 buttons.clicked = false;
             }
-            let p = response.interact_pointer_pos().map(|p| xf.to_doc(p)).or_else(|| app.drag.as_ref().and_then(|d| d.points.last().map(|q| [q[0], q[1]])));
+            // A primary guide release may arrive while the right button owns
+            // egui's interaction. In that case interact_pointer_pos() is None;
+            // the pointer's last position still completes the guide grab.
+            let p = response
+                .interact_pointer_pos()
+                .or_else(|| app.distort.global_perspective.is_some().then(|| ui.input(|i| i.pointer.latest_pos())).flatten())
+                .map(|p| xf.to_doc(p))
+                .or_else(|| app.drag.as_ref().and_then(|d| d.points.last().map(|q| [q[0], q[1]])));
             if let Some(d) = p {
                 tap_at_peak_pressure(app);
                 tool_event(app, ToolEvent::Up { x: d[0], y: d[1] }, mods);

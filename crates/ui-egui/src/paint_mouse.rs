@@ -113,6 +113,34 @@ pub fn right_erases(app: &PhotocraftApp, tool: Tool) -> bool {
 /// `secondary_erase` or `brush_resize_armed` for this frame's `Down`.
 pub fn canvas_buttons(app: &mut PhotocraftApp, response: &Response, tool: Tool) -> Buttons {
     let physical_right = app.services.right_button_down.as_ref().is_some_and(|f| f());
+    if app.distort.global_perspective.is_some() {
+        // The global editor edits guides with the primary button only. Right
+        // eraser and Alt-right resize must never emit primary-looking ToolEvents
+        // into its pointer handler (nor leave an armed brush gesture behind).
+        app.brush_resize_armed = false;
+        app.secondary_erase = false;
+        let secondary = physical_right
+            || response.ctx.input(|i| i.pointer.secondary_down())
+            || response.drag_started_by(PointerButton::Secondary)
+            || response.dragged_by(PointerButton::Secondary)
+            || response.drag_stopped_by(PointerButton::Secondary)
+            || response.secondary_clicked();
+        if secondary {
+            // A primary guide drag may have started before the right button
+            // was pressed. Deliver its release even while right is still held,
+            // or the editor can retain a stale corner/edge grab.
+            return Buttons {
+                stopped: response.drag_stopped_by(PointerButton::Primary) || response.ctx.input(|i| i.pointer.primary_released()),
+                ..Buttons::default()
+            };
+        }
+        return Buttons {
+            started: response.drag_started_by(PointerButton::Primary),
+            dragged: response.dragged_by(PointerButton::Primary),
+            stopped: response.drag_stopped_by(PointerButton::Primary),
+            clicked: response.clicked_by(PointerButton::Primary),
+        };
+    }
     let (mods, mut right_down) = response.ctx.input(|i| (i.modifiers, i.pointer.secondary_down()));
     right_down |= physical_right;
     let right_started = response.drag_started_by(PointerButton::Secondary) || (physical_right && response.drag_started());
@@ -163,6 +191,13 @@ pub fn canvas_buttons(app: &mut PhotocraftApp, response: &Response, tool: Tool) 
 /// `secondary_erase` armed for its `Down`). Otherwise a right-click with a painting tool opens
 /// the Brush Preset picker at screen point `at`, and nothing paints.
 pub fn pointer_secondary(app: &mut PhotocraftApp, ctx: &egui::Context, down: bool, mods: egui::Modifiers, at: [f32; 2]) -> bool {
+    // The control channel identifies the secondary button explicitly. Do not
+    // reinterpret it as a primary guide gesture during global rectification.
+    if app.distort.global_perspective.is_some() {
+        app.brush_resize_armed = false;
+        app.secondary_erase = false;
+        return false;
+    }
     let tool = app.ui.tool;
     if crate::brush_resize::applies(tool) && (crate::brush_resize::is_right_gesture(mods) || app.brush_resize.is_some_and(|r| r.secondary)) {
         app.brush_resize_armed = down && app.drag.is_none();
@@ -504,6 +539,43 @@ mod tests {
         press(&mut h, far, PointerButton::Primary, true);
         press(&mut h, far, PointerButton::Primary, false);
         assert!(h.state().ui.brush_picker.is_none() && h.state().ui.brush_picker_list.renaming.is_none());
+    }
+
+    #[test]
+    fn right_erase_drag_cannot_create_global_perspective_guides() {
+        let mut h = harness(Some("erase"));
+        // The editor requires actual raster pixels, not a blank new layer.
+        h.state_mut()
+            .session
+            .edit("global guide fixture", |doc, active| {
+                doc.layer_mut(active.unwrap()).unwrap().surface_mut().unwrap().fill_rect(photocraft_geom::Rect::new(0, 0, 400, 300), &[0.2, 0.5, 0.8, 1.0]);
+                Ok(())
+            })
+            .unwrap();
+        let ctx = h.ctx.clone();
+        crate::global_perspective_ui::begin(h.state_mut(), &ctx).unwrap();
+        let before = h.state().distort.global_perspective.as_ref().unwrap().describe();
+        let doc = h.state().session.active().unwrap().doc.clone();
+        let history = h.state().session.active().unwrap().history.past_len();
+        let c = h.state().last_canvas_rect.center();
+        let (a, b) = (c - vec2(70.0, 35.0), c + vec2(70.0, 35.0));
+        h.event(egui::Event::PointerMoved(a));
+        h.run_steps(1);
+        press(&mut h, a, PointerButton::Secondary, true);
+        for i in 1..=6 {
+            h.event(egui::Event::PointerMoved(a + (b - a) * (i as f32 / 6.0)));
+            h.run_steps(1);
+        }
+        press(&mut h, b, PointerButton::Secondary, false);
+        let s = h.state().distort.global_perspective.as_ref().unwrap();
+        assert_eq!(s.describe(), before, "right-button brush gesture modified global guides");
+        assert!(std::sync::Arc::ptr_eq(&doc, &h.state().session.active().unwrap().doc));
+        assert_eq!(h.state().session.active().unwrap().history.past_len(), history);
+        assert!(!h.state().secondary_erase);
+
+        crate::global_perspective_ui::control(h.state_mut(), &json!({"cancel":true})).unwrap();
+        drag(&mut h, PointerButton::Secondary);
+        assert_eq!(strokes(&h).len(), 1, "normal erase mode still works after the editor closes");
     }
 
     #[test]

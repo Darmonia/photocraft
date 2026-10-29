@@ -285,6 +285,16 @@ impl PhotocraftApp {
     /// Place the next file dropped on the canvas and start Free Transform on it, once no other
     /// transform is in progress (so several files are placed and transformed one after another).
     pub(crate) fn place_next_dropped(&mut self, ctx: &egui::Context) {
+        // Drop queues can arrive a frame after the press, including from a web
+        // shell. Discard pending placements while the global source is frozen:
+        // they must not appear unexpectedly after the user closes the editor.
+        if self.distort.global_perspective.is_some() && !self.drop_places.is_empty() {
+            self.drop_places.clear();
+            if let Err(error) = crate::transform_tool::reject_during_global_warp(self) {
+                self.failed(error);
+            }
+            return;
+        }
         while self.ui.transform.is_none() {
             let Some(next) = self.drop_places.pop_front() else { return };
             let (name, placed) = match next {
@@ -315,6 +325,7 @@ impl PhotocraftApp {
     /// Place a file's bytes as a smart object layer (File › Place; `linked`: Place Linked, to that
     /// path), for files that weren't read from a path the command can read.
     pub(crate) fn place_bytes(&mut self, name: &str, bytes: Vec<u8>, linked: Option<String>) -> Result<serde_json::Value, String> {
+        crate::transform_tool::reject_during_global_warp(self)?;
         let r = photocraft_engine::file_cmds::place_bytes(&mut self.session, name, bytes, linked, &serde_json::json!({})).map_err(|e| e.to_string());
         self.sync_views();
         r

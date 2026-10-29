@@ -308,3 +308,94 @@ fn secondary_source_cache_tracks_monitor_texture_limit_and_source_lifetime() {
     assert!(crate::canvas::global_source_texture(&mut a, &ctx, 0, Some(4), false).is_none());
     assert!(crate::distort_ui::display_doc(&a, 0).is_none());
 }
+
+#[test]
+fn place_entry_points_reject_before_mutating_global_warp_source() {
+    let ctx = egui::Context::default();
+    let mut a = app(&ctx);
+    let doc = a.session.active().unwrap().doc.clone();
+    let history = a.session.active().unwrap().history.past_len();
+    let before = a.distort.global_perspective.as_ref().unwrap().describe();
+    for cmd in ["file.placeEmbedded", "file.placeLinked"] {
+        let error = a.run(cmd, json!({"path":"__nonexistent_global_place_probe__.png"})).unwrap_err();
+        assert!(error.contains("Global Perspective Warp"), "{cmd}: {error}");
+        let error = crate::view_cmds::invoke(&mut a, &ctx, cmd, &json!({})).unwrap().unwrap_err();
+        assert!(error.contains("Global Perspective Warp"), "{cmd} picker: {error}");
+    }
+    let error = a.place_bytes("probe.png", vec![0, 1, 2, 3], None).unwrap_err();
+    assert!(error.contains("Global Perspective Warp"), "in-memory place: {error}");
+    a.drop_places.push_back(crate::file_open::DropPlace::Bytes("dropped.png".into(), vec![0, 1, 2, 3]));
+    a.place_next_dropped(&ctx);
+    assert!(a.drop_places.is_empty(), "a rejected drop must not be replayed after warp closes");
+    assert!(a.ui.status.contains("Global Perspective Warp"), "drop status: {}", a.ui.status);
+    assert_eq!(a.distort.global_perspective.as_ref().unwrap().describe(), before);
+    assert!(Arc::ptr_eq(&doc, &a.session.active().unwrap().doc));
+    assert_eq!(a.session.active().unwrap().history.past_len(), history);
+
+    control(&mut a, &json!({"cancel":true})).unwrap();
+    assert!(!a.place_bytes("probe.png", vec![0, 1, 2, 3], None).unwrap_err().contains("Global Perspective Warp"));
+}
+
+#[test]
+fn right_button_erase_and_alt_resize_do_not_touch_active_global_guides() {
+    for alt_resize in [false, true] {
+        let ctx = egui::Context::default();
+        let mut a = app(&ctx);
+        a.ui.tool = crate::state::Tool::Brush;
+        if !alt_resize {
+            a.run("prefs.set", json!({"path":"tools.rightClickWithPaintingTools","value":"erase"})).unwrap();
+        }
+        control(&mut a, &json!({"guides":guides()})).unwrap();
+        let before = a.distort.global_perspective.as_ref().unwrap().describe();
+        let doc = a.session.active().unwrap().doc.clone();
+        let history = a.session.active().unwrap().history.past_len();
+        let start = view().to_screen(25.0, 20.0);
+        let end = view().to_screen(70.0, 65.0);
+        let mods = egui::Modifiers { alt: alt_resize, ..Default::default() };
+        let right_event = |pos, pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Secondary, pressed, modifiers: mods };
+        canvas_frame(&mut a, &ctx, vec![egui::Event::PointerMoved(start), right_event(start, true)], true).drop_without_applying_deltas();
+        canvas_frame(&mut a, &ctx, vec![egui::Event::PointerMoved(end)], true).drop_without_applying_deltas();
+        canvas_frame(&mut a, &ctx, vec![right_event(end, false)], true).drop_without_applying_deltas();
+
+        // Agents can invoke the same right-button gestures through ui.pointer.
+        let (request, _rx) = crate::control::ControlRequest::new(
+            "ui.pointer",
+            json!({
+                "tool":"brush", "button":"right", "alt":alt_resize,
+                "events":[{"kind":"down","x":25,"y":20},{"kind":"move","x":70,"y":65},{"kind":"up","x":70,"y":65}]
+            }),
+        );
+        let outcome = crate::control::handle(&mut a, &ctx, &request);
+        let crate::control::Outcome::Done(reply) = outcome else {
+            panic!("right-button ui.pointer did not finish");
+        };
+        assert_eq!(reply["ok"], true, "right-button ui.pointer: {reply}");
+        let s = a.distort.global_perspective.as_ref().unwrap();
+        assert_eq!(s.describe(), before, "secondary drag changed guide state (alt={alt_resize})");
+        assert!(s.drag.is_none());
+        assert!(Arc::ptr_eq(&doc, &a.session.active().unwrap().doc));
+        assert_eq!(a.session.active().unwrap().history.past_len(), history);
+        assert!(!a.secondary_erase && !a.brush_resize_armed);
+    }
+}
+
+#[test]
+fn primary_guide_drag_release_is_not_lost_while_secondary_is_held() {
+    let ctx = egui::Context::default();
+    let mut a = app(&ctx);
+    control(&mut a, &json!({"guides":guides()})).unwrap();
+    let start = pos2(180.0, 150.0);
+    let end = pos2(230.0, 190.0);
+    let button_at = |pos, button, pressed| egui::Event::PointerButton { pos, button, pressed, modifiers: egui::Modifiers::NONE };
+    canvas_frame(&mut a, &ctx, vec![egui::Event::PointerMoved(start), button_at(start, egui::PointerButton::Primary, true)], true)
+        .drop_without_applying_deltas();
+    // Start the known corner grab while egui owns the primary pointer.
+    pointer(&mut a, ToolEvent::Down { x: 25.0, y: 20.0, pressure: 1.0 }, egui::Modifiers::NONE);
+    canvas_frame(&mut a, &ctx, vec![egui::Event::PointerMoved(end)], true).drop_without_applying_deltas();
+    assert!(a.distort.global_perspective.as_ref().unwrap().drag.is_some());
+    canvas_frame(&mut a, &ctx, vec![button_at(end, egui::PointerButton::Secondary, true)], true).drop_without_applying_deltas();
+    canvas_frame(&mut a, &ctx, vec![button_at(end, egui::PointerButton::Primary, false)], true).drop_without_applying_deltas();
+    assert!(a.distort.global_perspective.as_ref().unwrap().drag.is_none(), "primary release during secondary hold must terminate the guide grab");
+    canvas_frame(&mut a, &ctx, vec![button_at(end, egui::PointerButton::Secondary, false)], true).drop_without_applying_deltas();
+    assert!(a.distort.global_perspective.as_ref().unwrap().drag.is_none());
+}
