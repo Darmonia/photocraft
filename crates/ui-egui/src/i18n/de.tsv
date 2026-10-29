@@ -3317,3 +3317,19 @@ curves	Smooth	Glätten
 
 # Graphics Adapter preference (#1885)
 	GPU adapter	GPU-Adapter
+
+# Global rectification guide UI and V3.2 local axis lock
+	Global Perspective Warp	Globale Perspektivkorrektur
+	Global V3: draw independent guides on doors and windows, then rectify the whole photo	Global V3: Unabhängige Hilfsrahmen auf Türen und Fenster zeichnen, dann das ganze Foto entzerren
+	One global transform; guides are not image regions	Eine globale Transformation; Hilfsrahmen sind keine Bildbereiche
+	Edit guides	Hilfsrahmen bearbeiten
+	Rectify globally	Global entzerren
+	Delete guide	Hilfsrahmen löschen
+	Fit whole photo	Ganzes Foto einpassen
+	Global aspect	Globale Proportionen
+	Guide weight	Gewichtung des Hilfsrahmens
+	True proportions require a known measurement	Echte Proportionen erfordern ein bekanntes Maß
+	Inconsistent guides	Unvereinbare Hilfsrahmen
+	Compatible guides	Vereinbare Hilfsrahmen
+	Commit global rectification	Globale Entzerrung anwenden
+	Ctrl: image axes; Shift: perspective axes (corners)	Strg: Bildachsen; Umschalt: Perspektivachsen (Ecken)

@@ -103,6 +103,7 @@ pub mod flick_pan;
 mod font_preview;
 pub mod frame_tool;
 pub mod gallery_ui;
+pub mod global_perspective_ui;
 pub mod gpu_canvas;
 pub mod gpu_status;
 pub mod gradient_ui;
@@ -1182,6 +1183,16 @@ impl PhotocraftApp {
 
     /// Run an engine command, reporting errors in the status bar.
     pub fn run(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        // Place commands insert a layer before the interactive Free Transform
+        // begins. Refuse while the global guide editor owns the source document,
+        // otherwise begin_placed would reject only after history was mutated.
+        if matches!(id, "file.placeEmbedded" | "file.placeLinked")
+            && let Err(e) = transform_tool::reject_during_global_warp(self)
+        {
+            self.ui.status = e.clone();
+            self.ui.status_error = true;
+            return Err(e);
+        }
         if let Some(result) = delete_layer_prompt::intercept(self, id, &params) {
             return result;
         }

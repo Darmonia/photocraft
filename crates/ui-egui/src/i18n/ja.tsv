@@ -3986,3 +3986,19 @@ curves	Smooth	スムーズ
 
 # Graphics Adapter preference (#1885)
 	GPU adapter	GPU アダプター
+
+# Global rectification guide UI and V3.2 local axis lock
+	Global Perspective Warp	グローバル遠近補正
+	Global V3: draw independent guides on doors and windows, then rectify the whole photo	Global V3：ドアや窓に独立したガイドを描き、写真全体を補正します
+	One global transform; guides are not image regions	全体に一つの変換を適用します。ガイドは画像領域ではありません
+	Edit guides	ガイドを編集
+	Rectify globally	全体を補正
+	Delete guide	ガイドを削除
+	Fit whole photo	写真全体を収める
+	Global aspect	全体の縦横比
+	Guide weight	ガイドの重み
+	True proportions require a known measurement	実際の比率には既知の寸法が必要です
+	Inconsistent guides	不整合なガイド
+	Compatible guides	整合するガイド
+	Commit global rectification	全体補正を適用
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl：画像の軸、Shift：遠近方向の軸（頂点）

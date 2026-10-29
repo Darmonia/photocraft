@@ -93,7 +93,7 @@ The transport is `apps/photocraft/src/control_server.rs`, and the handlers are i
 
 ## Global perspective engine command
 
-The headless edit.perspectiveWarpGlobal command computes one homography from independent quadrilateral guides. Use engine.execute with solveOnly: true for non-mutating diagnostics. The Edit-guides UI is deferred to a follow-up. See global-perspective-warp.md for limits, options and safety guarantees.
+The headless edit.perspectiveWarpGlobal command computes one homography from independent quadrilateral guides. Use engine.execute with solveOnly: true for non-mutating diagnostics. The interactive Edit-guides UI is part of this successor PR: open with ui.menu.invoke and inspect via ui.inspect distort.globalPerspective. See global-perspective-warp.md for limits, options and safety guarantees.
 
 ## Engine commands
 

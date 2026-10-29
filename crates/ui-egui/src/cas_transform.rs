@@ -74,6 +74,7 @@ impl Live {
 
 /// Edit › Content-Aware Scale from the menu: open the box (`Err` says why it can't).
 pub fn begin(app: &mut PhotocraftApp, ctx: &egui::Context) -> Result<Value, String> {
+    crate::transform_tool::reject_during_global_warp(app)?;
     if app.ui.transform.is_some() {
         return Err("Commit or cancel the transform first".into());
     }

@@ -4008,3 +4008,19 @@ curves	Smooth	Εξομάλυνση
 
 # Graphics Adapter preference (#1885)
 	GPU adapter	Προσαρμογέας GPU
+
+# Global rectification guide UI and V3.2 local axis lock
+	Global Perspective Warp	Καθολική διόρθωση προοπτικής
+	Global V3: draw independent guides on doors and windows, then rectify the whole photo	Global V3: σχεδιάστε ανεξάρτητους οδηγούς σε πόρτες και παράθυρα και διορθώστε όλη τη φωτογραφία
+	One global transform; guides are not image regions	Ένας καθολικός μετασχηματισμός· οι οδηγοί δεν είναι περιοχές εικόνας
+	Edit guides	Επεξεργασία οδηγών
+	Rectify globally	Καθολική διόρθωση
+	Delete guide	Διαγραφή οδηγού
+	Fit whole photo	Προσαρμογή όλης της φωτογραφίας
+	Global aspect	Καθολικές αναλογίες
+	Guide weight	Βάρος οδηγού
+	True proportions require a known measurement	Οι πραγματικές αναλογίες απαιτούν γνωστή μέτρηση
+	Inconsistent guides	Ασύμβατοι οδηγοί
+	Compatible guides	Συμβατοί οδηγοί
+	Commit global rectification	Εφαρμογή καθολικής διόρθωσης
+	Ctrl: image axes; Shift: perspective axes (corners)	Ctrl: άξονες εικόνας· Shift: άξονες προοπτικής (γωνίες)

@@ -26,6 +26,7 @@ pub struct Distort {
     pub caf: Option<crate::caf_ui::CafWorkspace>,
     pub puppet: Option<crate::puppet_ui::PuppetSession>,
     pub perspective: Option<crate::perspective_ui::PerspSession>,
+    pub global_perspective: Option<crate::global_perspective_ui::GlobalSession>,
     pub vanishing: Option<crate::vp_ui::VpSession>,
     /// Filter Gallery dialog (gallery_ui).
     pub gallery: Option<crate::gallery_ui::GalleryDialog>,
@@ -35,7 +36,12 @@ pub struct Distort {
 
 impl Distort {
     pub fn active(&self) -> bool {
-        self.liquify.is_some() || self.caf.is_some() || self.puppet.is_some() || self.perspective.is_some() || self.vanishing.is_some()
+        self.liquify.is_some()
+            || self.caf.is_some()
+            || self.puppet.is_some()
+            || self.perspective.is_some()
+            || self.global_perspective.is_some()
+            || self.vanishing.is_some()
     }
 
     /// Short description for `ui.inspect`.
@@ -45,6 +51,7 @@ impl Distort {
             "contentAwareFill": self.caf.as_ref().map(|d| d.describe()),
             "puppet": self.puppet.as_ref().map(|p| p.describe()),
             "perspective": self.perspective.as_ref().map(|p| p.describe()),
+            "globalPerspective": self.global_perspective.as_ref().map(|p| p.describe()),
             "vanishingPoint": self.vanishing.as_ref().map(|v| v.describe()),
             "gallery": self.gallery.as_ref().map(|g| g.describe()),
         })
@@ -99,6 +106,12 @@ pub fn display_doc(app: &PhotocraftApp, idx: usize) -> Option<(Arc<Document>, u6
     if let Some(p) = &app.distort.puppet {
         return Some((p.preview_doc.clone(), (1 << 42) + p.key));
     }
+    if let Some(p) = &app.distort.global_perspective {
+        if !crate::global_perspective_ui::bound_to_active_document(app, p) {
+            return None;
+        }
+        return Some((p.preview_doc.clone(), (1 << 42) + p.key));
+    }
     if let Some(p) = &app.distort.perspective {
         return Some((p.preview_doc.clone(), (1 << 42) + p.key));
     }
@@ -109,7 +122,34 @@ pub fn display_doc(app: &PhotocraftApp, idx: usize) -> Option<(Arc<Document>, u6
 pub fn menu(app: &mut PhotocraftApp, ctx: &egui::Context, id: &str, params: &Value) -> Option<Result<Value, String>> {
     let empty = params.as_object().is_none_or(|o| o.is_empty());
     let ui = params.get("ui");
+    // Opening a second distortion while Global Perspective Warp owns the canvas
+    // would strand one preview behind the other. Controls/cancel remain available.
+    if empty
+        && app.distort.global_perspective.is_some()
+        && matches!(
+            id,
+            "filter.filterGallery"
+                | "filter.liquify"
+                | "edit.puppetWarp"
+                | "layer.smartObjects.puppetWarp"
+                | "edit.perspectiveWarp"
+                | "layer.smartObjects.perspectiveWarp"
+                | "filter.vanishingPoint"
+        )
+    {
+        return Some(Err("Finish or cancel Global Perspective Warp before starting another distortion".into()));
+    }
     match id {
+        "edit.perspectiveWarpGlobal" => Some((|| {
+            let object = params.as_object().ok_or("global perspective parameters must be an object")?;
+            if object.is_empty() {
+                return crate::global_perspective_ui::begin(app, ctx).map(|_| json!({"globalPerspective": app.distort.describe()["globalPerspective"]}));
+            }
+            if object.len() != 1 || !object.contains_key("ui") {
+                return Err("interactive global perspective expects only the ui field; use engine.execute for direct execution".into());
+            }
+            crate::global_perspective_ui::control(app, &params["ui"])
+        })()),
         "filter.filterGallery" if empty => Some(crate::gallery_ui::open(app).map(|_| json!({"gallery": app.distort.describe()["gallery"]}))),
         "filter.filterGallery" if ui.is_some() && app.distort.gallery.is_some() => Some(crate::gallery_ui::control(app, ui.unwrap_or(&Value::Null))),
         "filter.liquify" if empty => Some(crate::liquify_ui::open(app, ctx).map(|_| json!({"liquify": app.distort.describe()["liquify"]}))),
@@ -137,6 +177,10 @@ pub fn menu(app: &mut PhotocraftApp, ctx: &egui::Context, id: &str, params: &Val
 
 /// Pointer events (document coordinates) while a mode is active. True when consumed.
 pub fn pointer(app: &mut PhotocraftApp, ev: ToolEvent, mods: egui::Modifiers) -> bool {
+    if app.distort.global_perspective.is_some() {
+        crate::global_perspective_ui::pointer(app, ev, mods);
+        return true;
+    }
     if app.distort.caf.is_some() {
         crate::caf_ui::pointer(app, ev, mods);
         return true;
@@ -166,6 +210,16 @@ pub fn keys(app: &mut PhotocraftApp, ctx: &egui::Context) -> bool {
     use egui::{Key, Modifiers};
     let enter = |ctx: &egui::Context| ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Enter));
     let esc = |ctx: &egui::Context| ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
+    if app.distort.global_perspective.is_some() {
+        if enter(ctx) {
+            if let Err(error) = crate::global_perspective_ui::commit(app) {
+                app.ui.status = error;
+            }
+        } else if esc(ctx) {
+            app.distort.global_perspective = None;
+        }
+        return true;
+    }
     if app.distort.gallery.is_some() {
         if enter(ctx) {
             let _ = crate::gallery_ui::commit(app);
@@ -227,7 +281,12 @@ pub fn keys(app: &mut PhotocraftApp, ctx: &egui::Context) -> bool {
 }
 
 /// Canvas overlay for the on-canvas modes.
-pub fn draw_overlay(app: &PhotocraftApp, painter: &egui::Painter, xf: &ViewXform) {
+pub fn draw_overlay(app: &mut PhotocraftApp, painter: &egui::Painter, xf: &ViewXform) {
+    if app.distort.global_perspective.as_ref().is_some_and(|p| crate::global_perspective_ui::bound_to_active_document(app, p))
+        && let Some(p) = &mut app.distort.global_perspective
+    {
+        crate::global_perspective_ui::draw(p, painter, xf);
+    }
     if let Some(p) = &app.distort.puppet {
         crate::puppet_ui::draw(p, painter, xf);
     }
@@ -241,6 +300,11 @@ pub fn draw_overlay(app: &PhotocraftApp, painter: &egui::Painter, xf: &ViewXform
 
 /// Options bar for the on-canvas modes. True when drawn.
 pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> bool {
+    if app.distort.global_perspective.is_some() {
+        // Even if the source Arc is obsolete, keep the visible Cancel action.
+        crate::global_perspective_ui::options_bar(app, ui);
+        return true;
+    }
     if app.distort.puppet.is_some() {
         crate::puppet_ui::options_bar(app, ui);
         return true;
@@ -270,6 +334,7 @@ pub fn drop_foreign(app: &mut PhotocraftApp) {
         crate::caf_ui::cancel(app);
         app.distort.puppet = None;
         app.distort.perspective = None;
+        app.distort.global_perspective = None;
         app.distort.vanishing = None;
         app.distort.gallery = None;
         app.distort.owner = None;
