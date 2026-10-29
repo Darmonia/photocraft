@@ -281,9 +281,9 @@ pub fn keys(app: &mut PhotocraftApp, ctx: &egui::Context) -> bool {
 }
 
 /// Canvas overlay for the on-canvas modes.
-pub fn draw_overlay(app: &PhotocraftApp, painter: &egui::Painter, xf: &ViewXform) {
-    if let Some(p) = &app.distort.global_perspective
-        && crate::global_perspective_ui::bound_to_active_document(app, p)
+pub fn draw_overlay(app: &mut PhotocraftApp, painter: &egui::Painter, xf: &ViewXform) {
+    if app.distort.global_perspective.as_ref().is_some_and(|p| crate::global_perspective_ui::bound_to_active_document(app, p))
+        && let Some(p) = &mut app.distort.global_perspective
     {
         crate::global_perspective_ui::draw(p, painter, xf);
     }

@@ -299,6 +299,7 @@ fn colour_param(p: &Value, key: &str) -> Option<[f32; 4]> {
 
 /// Opens the dialog on the active layer, starting from the last gallery stack used.
 pub fn open(app: &mut PhotocraftApp) -> Result<(), String> {
+    reject_during_global_warp(app)?;
     let (layer, src, _) = crate::distort_ui::active_pixels(app)?;
     let last = app.session.journal.iter().rev().find(|(id, _)| id == "filter.filterGallery").map(|(_, p)| p.clone());
     let effects = last.as_ref().map(effects_from).unwrap_or_default();
@@ -309,6 +310,7 @@ pub fn open(app: &mut PhotocraftApp) -> Result<(), String> {
 /// Re-opens Filter Gallery smart filter `index` of smart object `layer` with its recorded stack,
 /// previewing on the pixels below it; OK updates that filter (`layer.smartFilter.setParams`).
 pub fn open_smart_filter(app: &mut PhotocraftApp, layer: LayerId, index: usize) -> Result<(), String> {
+    reject_during_global_warp(app)?;
     let st = app.session.active().ok_or("no document")?;
     let Some(photocraft_doc::LayerContent::Smart(sm)) = st.doc.layer(layer).map(|l| &l.content) else {
         return Err("the layer is not a smart object".into());
@@ -324,6 +326,10 @@ pub fn open_smart_filter(app: &mut PhotocraftApp, layer: LayerId, index: usize) 
     let fg = colour_param(&p, "foreground").unwrap_or(app.session.tools.foreground);
     let bg = colour_param(&p, "background").unwrap_or(app.session.tools.background);
     open_on(app, layer, src, effects_from(&p), [fg, bg], Some(index))
+}
+
+fn reject_during_global_warp(app: &PhotocraftApp) -> Result<(), String> {
+    if app.distort.global_perspective.is_some() { Err("Finish or cancel Global Perspective Warp before opening Filter Gallery".into()) } else { Ok(()) }
 }
 
 fn open_on(

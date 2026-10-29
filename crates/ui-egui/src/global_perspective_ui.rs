@@ -12,6 +12,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::Arc;
 
+#[cfg(test)]
+mod followup_tests;
 mod local_axes;
 #[cfg(test)]
 mod p2_tests;
@@ -191,7 +193,9 @@ pub struct GlobalSession {
     opacity: f32,
     display_key: u64,
     grid_size: usize,
-    grid: Vec<[f64; 2]>,
+    mesh: Option<(ViewXform, Arc<egui::Mesh>)>,
+    /// Separate from the primary canvas cache: secondary windows show the source.
+    pub(crate) source_textures: Vec<(u64, u32, TextureHandle)>,
 }
 impl GlobalSession {
     pub fn describe(&self) -> Value {
@@ -229,22 +233,50 @@ impl GlobalSession {
         };
         corners.iter().flatten().all(|v| v.is_finite() && v.abs() <= f32::MAX as f64).then_some(corners)
     }
-    fn update_grid(&mut self) {
-        let b = self.bounds;
+    fn invalidate_mesh(&mut self) {
+        // Geometry changes invalidate the sole screen mesh. Do not retain a second
+        // dense document-space grid or clone the mesh when submitting a repaint.
+        self.mesh = None;
+    }
+    fn preview_mesh(&mut self, xf: &ViewXform) -> Arc<egui::Mesh> {
+        if let Some((view, mesh)) = &self.mesh
+            && view == xf
+        {
+            return Arc::clone(mesh);
+        }
+        self.mesh = None;
+        let mut mesh = egui::Mesh::with_texture(self.texture.id());
+        let tint = Color32::from_white_alpha((self.opacity.clamp(0.0, 1.0) * 255.0) as u8);
         let n = self.grid_size;
-        let mut grid = Vec::with_capacity((n + 1) * (n + 1));
-        for y in 0..=n {
-            for x in 0..=n {
-                grid.push(self.map([b.x0 as f64 + b.width() as f64 * x as f64 / n as f64, b.y0 as f64 + b.height() as f64 * y as f64 / n as f64]));
+        mesh.vertices.reserve((n + 1) * (n + 1));
+        mesh.indices.reserve(n * n * 6);
+        let b = self.bounds;
+        for j in 0..=n {
+            for i in 0..=n {
+                let p = self.map([b.x0 as f64 + b.width() as f64 * i as f64 / n as f64, b.y0 as f64 + b.height() as f64 * j as f64 / n as f64]);
+                mesh.vertices.push(egui::epaint::Vertex {
+                    pos: xf.to_screen(p[0] as f32, p[1] as f32),
+                    uv: pos2(i as f32 / n as f32, j as f32 / n as f32),
+                    color: tint,
+                });
             }
         }
-        self.grid = grid;
+        for j in 0..n {
+            for i in 0..n {
+                let a = (j * (n + 1) + i) as u32;
+                mesh.add_triangle(a, a + 1, a + n as u32 + 2);
+                mesh.add_triangle(a, a + n as u32 + 2, a + n as u32 + 1);
+            }
+        }
+        let mesh = Arc::new(mesh);
+        self.mesh = Some((*xf, Arc::clone(&mesh)));
+        mesh
     }
     fn invalidate(&mut self) {
         self.solution = None;
         self.show_result = false;
         self.grid_size = GRID;
-        self.update_grid();
+        self.invalidate_mesh();
     }
     fn move_corner(&mut self, id: u64, index: usize, p: [f64; 2]) {
         // Guide handles may extend into the pasteboard, outside the image itself.
@@ -380,7 +412,7 @@ pub fn begin(app: &mut PhotocraftApp, ctx: &egui::Context) -> Result<(), String>
     let key = app.ui.alloc_id();
     let texture =
         ctx.load_texture(format!("global-perspective-v3-{key}"), crate::distort_ui::surface_image(&surface, bounds, 2048), egui::TextureOptions::LINEAR);
-    let mut s = GlobalSession {
+    let s = GlobalSession {
         key,
         layer,
         source_doc,
@@ -396,9 +428,9 @@ pub fn begin(app: &mut PhotocraftApp, ctx: &egui::Context) -> Result<(), String>
         opacity,
         display_key: display.key,
         grid_size: GRID,
-        grid: Vec::new(),
+        mesh: None,
+        source_textures: Vec::new(),
     };
-    s.update_grid();
     app.distort.global_perspective = Some(s);
     app.ui.status = tl!("Global V3: draw independent guides on doors and windows, then rectify the whole photo").into();
     Ok(())
@@ -469,7 +501,14 @@ pub fn control(app: &mut PhotocraftApp, value: &Value) -> Result<Value, String> 
     };
     // Compute the safe tessellation before modifying the current session.
     // Never display a coarse mesh when its affine UVs diverge from the solver.
-    let grid_size = if show_result { preview_grid_size(s.bounds, &solution.as_ref().ok_or("no current solution")?.homography())? } else { GRID };
+    let geometry_changed = replaced || should_solve || show_result != s.show_result;
+    let grid_size = if !geometry_changed {
+        s.grid_size
+    } else if show_result {
+        preview_grid_size(s.bounds, &solution.as_ref().ok_or("no current solution")?.homography())?
+    } else {
+        GRID
+    };
     s.guides = guides;
     s.options = options;
     s.selected = selected;
@@ -477,7 +516,9 @@ pub fn control(app: &mut PhotocraftApp, value: &Value) -> Result<Value, String> 
     s.show_result = show_result;
     s.grid_size = grid_size;
     s.drag = None;
-    s.update_grid();
+    if geometry_changed {
+        s.invalidate_mesh();
+    }
     if let Some(sol) = &s.solution {
         app.ui.status = format!(
             "V3: {} / {} | {:.2} deg | {}",
@@ -614,25 +655,20 @@ pub fn pointer(app: &mut PhotocraftApp, ev: ToolEvent, mods: egui::Modifiers) {
     }
 }
 
-pub fn draw(s: &GlobalSession, painter: &egui::Painter, xf: &ViewXform) {
+/// Keep the last accepted guide coordinates, but release the grab before navigation
+/// consumes button-up. An unfinished new guide is discarded without creating it.
+pub(crate) fn yield_pointer(app: &mut PhotocraftApp, primary: bool, owns_pointer: bool) {
+    if primary
+        && !owns_pointer
+        && let Some(s) = app.distort.global_perspective.as_mut()
+    {
+        s.drag = None;
+    }
+}
+
+pub fn draw(s: &mut GlobalSession, painter: &egui::Painter, xf: &ViewXform) {
     let scr = |p: [f64; 2]| xf.to_screen(p[0] as f32, p[1] as f32);
-    let mut mesh = egui::Mesh::with_texture(s.texture.id());
-    // Neutral image modulation, not a hard-coded UI theme color.
-    let tint = Color32::from_white_alpha((s.opacity.clamp(0.0, 1.0) * 255.0) as u8);
-    let n = s.grid_size;
-    for (j, row) in s.grid.chunks_exact(n + 1).enumerate() {
-        for (i, p) in row.iter().enumerate() {
-            mesh.vertices.push(egui::epaint::Vertex { pos: scr(*p), uv: pos2(i as f32 / n as f32, j as f32 / n as f32), color: tint });
-        }
-    }
-    for j in 0..n {
-        for i in 0..n {
-            let a = (j * (n + 1) + i) as u32;
-            mesh.add_triangle(a, a + 1, a + n as u32 + 2);
-            mesh.add_triangle(a, a + n as u32 + 2, a + n as u32 + 1);
-        }
-    }
-    painter.add(mesh);
+    painter.add(egui::Shape::Mesh(s.preview_mesh(xf)));
     let t = crate::theme::Tokens::get(painter.ctx());
     for g in &s.guides {
         let rejected = s.solution.as_ref().is_some_and(|sol| sol.rejected_guide_ids.contains(&g.id));
@@ -691,7 +727,7 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     if ui.selectable_label(!s.show_result, tl!("Edit guides")).clicked() {
         s.show_result = false;
         s.grid_size = GRID;
-        s.update_grid();
+        s.invalidate_mesh();
     }
     if ui.button(tl!("Rectify globally")).clicked() {
         do_solve = true;

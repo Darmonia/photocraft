@@ -187,7 +187,7 @@ fn corners(r: [f64; 4]) -> [[f64; 2]; 4] {
     [[r[0], r[1]], [r[2], r[1]], [r[2], r[3]], [r[0], r[3]]]
 }
 
-fn reject_during_global_warp(app: &PhotocraftApp) -> Result<(), String> {
+pub(crate) fn reject_during_global_warp(app: &PhotocraftApp) -> Result<(), String> {
     if app.distort.global_perspective.is_some() { Err("Finish or cancel Global Perspective Warp before starting Free Transform".into()) } else { Ok(()) }
 }
 
@@ -328,6 +328,7 @@ pub(crate) fn begin_content_aware(
     region: photocraft_geom::Rect,
     live: crate::cas_transform::Live,
 ) -> Result<(), String> {
+    reject_during_global_warp(app)?;
     let st = app.session.active().ok_or("no document")?;
     let (doc, revision) = (st.doc.clone(), st.revision);
     let id = st.active_layer.ok_or("no active layer")?;

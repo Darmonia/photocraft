@@ -918,7 +918,7 @@ pub enum ToolEvent {
 pub(crate) const LAYER_EDGES: Color32 = Color32::from_rgb(0x2d, 0x8c, 0xeb);
 
 /// Document ↔ screen mapping for a canvas rect and a view.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ViewXform {
     pub rect: Rect,
     pub zoom: f32,
@@ -3098,8 +3098,43 @@ fn hdr_preview(app: &PhotocraftApp, doc: &photocraft_doc::Document) -> Option<[f
 
 /// Global guide editing owns ordinary primary-button input even when a view tool
 /// is selected. Explicit temporary Hand/Zoom and the middle button still navigate.
-pub(crate) fn global_guides_own_primary_input(active: bool, primary: bool, under_dialog: bool, temporary: bool, middle: bool) -> bool {
-    active && primary && !under_dialog && !temporary && !middle
+pub(crate) fn global_guides_own_primary_input(active: bool, primary: bool, under_dialog: bool, view_navigation_temporary: bool, middle: bool) -> bool {
+    active && primary && !under_dialog && !view_navigation_temporary && !middle
+}
+
+/// A global warp removes its target from the primary composite and draws it as a
+/// mesh. Secondary windows have no editing overlay: show the complete source,
+/// color-managed for their display, in a separate session-scoped texture. Sharing
+/// the primary texture would overwrite one view's pixels before either is painted.
+pub(crate) fn global_source_texture(app: &mut PhotocraftApp, ctx: &egui::Context, idx: usize, output: Option<u32>, primary: bool) -> Option<egui::TextureId> {
+    if primary || app.session.active_index() != Some(idx) {
+        return None;
+    }
+    let s = app.distort.global_perspective.as_ref()?;
+    if !crate::global_perspective_ui::bound_to_active_document(app, s) {
+        return None;
+    }
+    let doc = app.session.documents().get(idx)?.doc.clone();
+    let (display, key) = canvas_display(app, &doc, output);
+    let side = texture_side(ctx);
+    let s = app.distort.global_perspective.as_mut()?;
+    if let Some((_, _, texture)) = s.source_textures.iter().find(|(cached_key, cached_side, _)| *cached_key == key && *cached_side == side) {
+        return Some(texture.id());
+    }
+    // Distinct monitors need distinct ICC-converted textures. Keep a bounded
+    // session cache so alternating display profiles never rebuild every frame.
+    s.source_textures.retain(|(_, cached_side, _)| *cached_side == side);
+    const MAX_SOURCE_DISPLAYS: usize = 8;
+    if s.source_textures.len() >= MAX_SOURCE_DISPLAYS {
+        drop(s.source_textures.remove(0));
+    }
+    let factor = doc.size.width.max(doc.size.height).div_ceil(side).max(1);
+    let (w, h) = ((doc.size.width / factor).max(1), (doc.size.height / factor).max(1));
+    let image = display_image(display.as_deref(), &photocraft_compose::render_reduced(&doc, w, h));
+    let texture = ctx.load_texture(format!("global-perspective-source-{}-{}", s.key, key), image, canvas_texture_options(factor));
+    let id = texture.id();
+    s.source_textures.push((key, side, texture));
+    Some(id)
 }
 
 /// Draw one canvas view and handle its input. `primary` = main window (tools active).
@@ -3192,7 +3227,9 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
         // A flipped or pixel-aspect-corrected view draws through the CPU path (the GPU canvas shader
         // has no mirroring or non-square pixels). Rotation stays on the GPU: it is a view uniform.
         let gpu_ok = crate::gpu_canvas::gpu_view_ok(flip, view.rotation, aspect);
-        if app.gpu.is_some()
+        let source_texture = global_source_texture(app, &ctx, idx, output, primary);
+        if source_texture.is_none()
+            && app.gpu.is_some()
             && gpu_ok
             && let Some((k, key, preview_size)) =
                 ensure_adjust_proxy(app, idx, view.zoom).or_else(|| ensure_filter_preview(app, idx, &ctx)).or_else(|| ensure_proxy_preview(app, idx, view.zoom))
@@ -3223,7 +3260,7 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
                 offset: [0.0, 0.0],
             };
             paint_gpu_view(&painter, rect, params, &pattern);
-        } else if gpu_ok && ensure_gpu(app, &ctx, idx, visible_doc_rect(&xf)) {
+        } else if source_texture.is_none() && gpu_ok && ensure_gpu(app, &ctx, idx, visible_doc_rect(&xf)) {
             on_gpu = true;
             app.perf.gpu = true;
             // Shadow, checkerboard, document and pixel grid in one custom shader (gpu_canvas.rs).
@@ -3257,7 +3294,7 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
             }
             let rotated = view.rotation.abs() > 0.05;
             let checkerboard = app.session.prefs().transparency_and_gamut.square().map(|square| (checker(app, &ctx), square));
-            let tex = ensure_texture(app, &ctx, idx, output).map(|(tex, _scale)| tex);
+            let tex = source_texture.or_else(|| ensure_texture(app, &ctx, idx, output).map(|(tex, _scale)| tex));
             paint_cpu_document(&painter, &xf, doc.bounds(), rotated, checkerboard, tex);
             for &c in &pattern {
                 paint_cpu_document(&painter, &pattern_xf(&xf, c, size), doc.bounds(), rotated, checkerboard, tex);
@@ -3525,7 +3562,14 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
         None if middle => Tool::Hand,
         None => app.ui.tool,
     };
-    let guide_owns_primary = global_guides_own_primary_input(app.distort.global_perspective.is_some(), primary, under_dialog, temporary.is_some(), middle);
+    let view_navigation_temporary =
+        matches!(temporary, Some(crate::hold_keys::Temporary::Hand | crate::hold_keys::Temporary::ZoomIn | crate::hold_keys::Temporary::ZoomOut));
+    // Ctrl temporarily selects Move for ordinary tools, but in V3.2 it locks
+    // guide axes. Only actual view navigation may yield the pointer stream.
+    let guide_owns_primary =
+        global_guides_own_primary_input(app.distort.global_perspective.is_some(), primary, under_dialog, view_navigation_temporary, middle);
+    let navigation_owns_pointer = middle || under_dialog || view_navigation_temporary;
+    crate::global_perspective_ui::yield_pointer(app, primary, !navigation_owns_pointer);
     // ⌘ held: this frame's gestures go to the Move tool (`PhotocraftApp::active_tool`). The Hand
     // and Zoom never reach `tool_event`, so only the Move needs the state machine to know.
     app.tool_override = (temporary == Some(crate::hold_keys::Temporary::Move)).then_some(Tool::Move);
@@ -3839,7 +3883,7 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
         if buttons.started
             && let Some(p) = ui.input(|i| i.pointer.press_origin()).filter(|p| rect.contains(*p)).or(response.interact_pointer_pos())
         {
-            if tool == Tool::Move && app.ui.transform.is_none() {
+            if tool == Tool::Move && !guide_owns_primary && app.ui.transform.is_none() {
                 begin_transform_controls_at(app, &ctx, &xf, p);
             }
             let d = xf.to_doc(p);
@@ -3965,7 +4009,7 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
                     }
                 }
                 _ => {
-                    if tool == Tool::Move && app.ui.transform.is_none() {
+                    if tool == Tool::Move && !guide_owns_primary && app.ui.transform.is_none() {
                         begin_transform_controls_at(app, &ctx, &xf, p);
                     }
                     // If this tool was not handled on pointer-down, fall back to a

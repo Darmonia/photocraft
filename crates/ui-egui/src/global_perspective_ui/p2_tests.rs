@@ -35,7 +35,7 @@ fn unsupported_layer_compositing_is_rejected_without_mutating_pixels_or_history(
                     3 => layer.advanced.knockout = photocraft_doc::Knockout::Deep,
                     4 => layer.excluded_channels = 1,
                     5 => layer.visible = false,
-                    _ => unreachable!(),
+                    _ => assert!((0..6).contains(&case), "unsupported fixture case {case}"),
                 }
                 Ok(())
             })
