@@ -31,13 +31,7 @@ fn unsupported_layer_compositing_is_rejected_without_mutating_pixels_or_history(
                 match case {
                     0 => layer.blend = photocraft_doc::BlendMode::Multiply,
                     1 => layer.clipped = true,
-                    2 => layer.blend_if.set(
-                        0,
-                        [
-                            photocraft_doc::BlendRange { black: [40, 40], white: [255, 255] },
-                            photocraft_doc::BlendRange::FULL,
-                        ],
-                    ),
+                    2 => layer.blend_if.set(0, [photocraft_doc::BlendRange { black: [40, 40], white: [255, 255] }, photocraft_doc::BlendRange::FULL]),
                     3 => layer.advanced.knockout = photocraft_doc::Knockout::Deep,
                     4 => layer.excluded_channels = 1,
                     5 => layer.visible = false,
@@ -129,14 +123,7 @@ fn ctrl_dead_zone_is_two_screen_points_at_multiple_zooms_for_corners_and_edges()
         // Explicit edge drag tests the same screen-space threshold, independent of
         // the corner hit-area at very low zoom.
         let s = a.distort.global_perspective.as_mut().unwrap();
-        s.drag = Some(Drag::Edge {
-            id: 1,
-            edge: 0,
-            mouse_start: [60.0, 18.0],
-            original: s.guides[0].corners,
-            axis: None,
-            activation_distance: threshold,
-        });
+        s.drag = Some(Drag::Edge { id: 1, edge: 0, mouse_start: [60.0, 18.0], original: s.guides[0].corners, axis: None, activation_distance: threshold });
         let old = s.guides[0].corners;
         s.drag_to([60.0 + 0.2 / z, 18.0 + 1.0 / z], ctrl);
         assert_eq!(s.guides[0].corners, old);
@@ -156,11 +143,10 @@ fn stale_source_keeps_visible_options_bar_and_non_destructive_cancel() {
     let idx = a.session.active_index().unwrap();
     assert!(crate::distort_ui::display_doc(&a, idx).is_none());
     let ctx = egui::Context::default();
-    let _ = ctx.run(egui::RawInput::default(), |ctx| {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            assert!(crate::distort_ui::options_bar(&mut a, ui), "stale session must retain visible Cancel");
-        });
+    let output = ctx.run_ui(egui::RawInput::default(), |ui| {
+        assert!(crate::distort_ui::options_bar(&mut a, ui), "stale session must retain visible Cancel");
     });
+    output.drop_without_applying_deltas();
     assert!(commit(&mut a).is_err(), "a stale session cannot commit");
     assert_eq!(control(&mut a, &json!({"cancel":true})).unwrap()["cancelled"], true);
     assert!(a.distort.global_perspective.is_none());
