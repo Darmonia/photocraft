@@ -20,6 +20,61 @@ mod shift_tests;
 use local_axes::LocalAxes;
 
 const GRID: usize = 128;
+const MAX_PREVIEW_GRID: usize = 512;
+const MAX_MESH_ERROR_PX: f64 = 0.5;
+
+/// Reject any mesh whose affine triangles visibly diverge from the exact
+/// homography. Test their edges and interiors, not just the projected corners.
+fn preview_mesh_exceeds_error(bounds: Rect, h: &photocraft_algo::transform::Homography, steps: usize) -> bool {
+    let dx = f64::from(bounds.width()) / steps as f64;
+    let dy = f64::from(bounds.height()) / steps as f64;
+    let check = |source: [f64; 2], approx: [f64; 2]| {
+        let exact = h.apply(source[0], source[1]);
+        !exact.0.is_finite()
+            || !exact.1.is_finite()
+            || !approx.iter().all(|v| v.is_finite() && v.abs() <= f32::MAX as f64)
+            || (exact.0 - approx[0]).hypot(exact.1 - approx[1]) > MAX_MESH_ERROR_PX
+    };
+    for j in 0..steps {
+        for i in 0..steps {
+            let x = f64::from(bounds.x0) + i as f64 * dx;
+            let y = f64::from(bounds.y0) + j as f64 * dy;
+            let corners = [[x, y], [x + dx, y], [x + dx, y + dy], [x, y + dy]];
+            let projected = corners.map(|p| {
+                let (a, b) = h.apply(p[0], p[1]);
+                [a, b]
+            });
+            if projected.iter().flatten().any(|v| !v.is_finite() || v.abs() > f32::MAX as f64) {
+                return true;
+            }
+            // Both triangles use the diagonal from corner 0 to corner 2.
+            for (a, b) in [(0, 1), (1, 2), (2, 3), (3, 0), (0, 2)] {
+                let mid = [(corners[a][0] + corners[b][0]) * 0.5, (corners[a][1] + corners[b][1]) * 0.5];
+                let linear = [(projected[a][0] + projected[b][0]) * 0.5, (projected[a][1] + projected[b][1]) * 0.5];
+                if check(mid, linear) {
+                    return true;
+                }
+            }
+            for (a, b, c) in [(0, 1, 2), (0, 2, 3)] {
+                let third = [(corners[a][0] + corners[b][0] + corners[c][0]) / 3.0, (corners[a][1] + corners[b][1] + corners[c][1]) / 3.0];
+                let linear = [(projected[a][0] + projected[b][0] + projected[c][0]) / 3.0, (projected[a][1] + projected[b][1] + projected[c][1]) / 3.0];
+                if check(third, linear) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+fn preview_grid_size(bounds: Rect, h: &photocraft_algo::transform::Homography) -> Result<usize, String> {
+    for size in [GRID, GRID * 2, MAX_PREVIEW_GRID] {
+        if !preview_mesh_exceeds_error(bounds, h, size) {
+            return Ok(size);
+        }
+    }
+    Err("Perspective is too strong for a faithful live preview within the mesh budget; adjust the guides or use the headless global warp".into())
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Axis {
     Horizontal,
@@ -134,6 +189,8 @@ pub struct GlobalSession {
     drag: Option<Drag>,
     texture: TextureHandle,
     opacity: f32,
+    display_key: u64,
+    grid_size: usize,
     grid: Vec<[f64; 2]>,
 }
 impl GlobalSession {
@@ -174,10 +231,11 @@ impl GlobalSession {
     }
     fn update_grid(&mut self) {
         let b = self.bounds;
-        let mut grid = Vec::with_capacity((GRID + 1) * (GRID + 1));
-        for y in 0..=GRID {
-            for x in 0..=GRID {
-                grid.push(self.map([b.x0 as f64 + b.width() as f64 * x as f64 / GRID as f64, b.y0 as f64 + b.height() as f64 * y as f64 / GRID as f64]));
+        let n = self.grid_size;
+        let mut grid = Vec::with_capacity((n + 1) * (n + 1));
+        for y in 0..=n {
+            for x in 0..=n {
+                grid.push(self.map([b.x0 as f64 + b.width() as f64 * x as f64 / n as f64, b.y0 as f64 + b.height() as f64 * y as f64 / n as f64]));
             }
         }
         self.grid = grid;
@@ -185,6 +243,7 @@ impl GlobalSession {
     fn invalidate(&mut self) {
         self.solution = None;
         self.show_result = false;
+        self.grid_size = GRID;
         self.update_grid();
     }
     fn move_corner(&mut self, id: u64, index: usize, p: [f64; 2]) {
@@ -254,6 +313,7 @@ impl GlobalSession {
 
 pub fn bound_to_active_document(app: &PhotocraftApp, s: &GlobalSession) -> bool {
     app.session.active().is_some_and(|st| st.doc.id == s.source_doc.id && Arc::ptr_eq(&st.doc, &s.source_doc))
+        && app.session.color.canvas_display_for(&s.source_doc, app.session.color.main_display).is_ok_and(|d| d.is_identity() && d.key == s.display_key)
 }
 fn validate_session(app: &PhotocraftApp) -> Result<(), String> {
     let s = app.distort.global_perspective.as_ref().ok_or("Global Perspective Warp is not active")?;
@@ -263,6 +323,9 @@ fn validate_session(app: &PhotocraftApp) -> Result<(), String> {
     }
     if !Arc::ptr_eq(&st.doc, &s.source_doc) {
         return Err("The source document changed; cancel and reopen Global Perspective Warp to avoid a stale commit".into());
+    }
+    if !bound_to_active_document(app, s) {
+        return Err("The source or color display changed; cancel and reopen Global Perspective Warp".into());
     }
     validate_target(&app.session, s.layer)?;
     Ok(())
@@ -276,6 +339,19 @@ pub fn begin(app: &mut PhotocraftApp, ctx: &egui::Context) -> Result<(), String>
     let bounds = validate_target(&app.session, layer)?;
     let st = app.session.active().ok_or("no document")?;
     let l = st.doc.layer(layer).ok_or("no layer")?;
+    // The mesh uploads raw RGBA8 without the document-to-monitor LUT or HDR data.
+    // Reject incompatible previews instead of changing colors on open/commit.
+    if st.doc.mode != photocraft_doc::ColorMode::Rgb || st.doc.depth != photocraft_doc::SampleType::U8 {
+        return Err("Global Perspective Warp preview currently requires an 8-bit RGB document; use a converted copy".into());
+    }
+    let display = app
+        .session
+        .color
+        .canvas_display_for(&st.doc, app.session.color.main_display)
+        .map_err(|_| "Global Perspective Warp cannot resolve the active color display")?;
+    if !display.is_identity() {
+        return Err("Global Perspective Warp preview cannot reproduce this document/monitor color transform; use an sRGB display or a converted copy".into());
+    }
     // A raw mesh cannot render layer styles: removing the original would also
     // remove its shadow/stroke, while commit retains those effects. Fail closed
     // rather than showing a preview that disagrees with the committed image.
@@ -318,6 +394,8 @@ pub fn begin(app: &mut PhotocraftApp, ctx: &egui::Context) -> Result<(), String>
         drag: None,
         texture,
         opacity,
+        display_key: display.key,
+        grid_size: GRID,
         grid: Vec::new(),
     };
     s.update_grid();
@@ -389,11 +467,15 @@ pub fn control(app: &mut PhotocraftApp, value: &Value) -> Result<Value, String> 
     } else {
         s.show_result
     };
+    // Compute the safe tessellation before modifying the current session.
+    // Never display a coarse mesh when its affine UVs diverge from the solver.
+    let grid_size = if show_result { preview_grid_size(s.bounds, &solution.as_ref().ok_or("no current solution")?.homography())? } else { GRID };
     s.guides = guides;
     s.options = options;
     s.selected = selected;
     s.solution = solution;
     s.show_result = show_result;
+    s.grid_size = grid_size;
     s.drag = None;
     s.update_grid();
     if let Some(sol) = &s.solution {
@@ -537,16 +619,17 @@ pub fn draw(s: &GlobalSession, painter: &egui::Painter, xf: &ViewXform) {
     let mut mesh = egui::Mesh::with_texture(s.texture.id());
     // Neutral image modulation, not a hard-coded UI theme color.
     let tint = Color32::from_white_alpha((s.opacity.clamp(0.0, 1.0) * 255.0) as u8);
-    for (j, row) in s.grid.as_chunks::<{ GRID + 1 }>().0.iter().enumerate() {
+    let n = s.grid_size;
+    for (j, row) in s.grid.chunks_exact(n + 1).enumerate() {
         for (i, p) in row.iter().enumerate() {
-            mesh.vertices.push(egui::epaint::Vertex { pos: scr(*p), uv: pos2(i as f32 / GRID as f32, j as f32 / GRID as f32), color: tint });
+            mesh.vertices.push(egui::epaint::Vertex { pos: scr(*p), uv: pos2(i as f32 / n as f32, j as f32 / n as f32), color: tint });
         }
     }
-    for j in 0..GRID {
-        for i in 0..GRID {
-            let a = (j * (GRID + 1) + i) as u32;
-            mesh.add_triangle(a, a + 1, a + GRID as u32 + 2);
-            mesh.add_triangle(a, a + GRID as u32 + 2, a + GRID as u32 + 1);
+    for j in 0..n {
+        for i in 0..n {
+            let a = (j * (n + 1) + i) as u32;
+            mesh.add_triangle(a, a + 1, a + n as u32 + 2);
+            mesh.add_triangle(a, a + n as u32 + 2, a + n as u32 + 1);
         }
     }
     painter.add(mesh);
@@ -597,7 +680,7 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         if ui.button(tl!("Cancel (Esc)")).clicked() {
             app.distort.global_perspective = None;
         }
-        ui.colored_label(crate::theme::Tokens::get(ui.ctx()).warning, "Source changed; reopen Global Perspective Warp");
+        ui.colored_label(crate::theme::Tokens::get(ui.ctx()).warning, "Source or color display changed; reopen Global Perspective Warp");
         return;
     }
     let mut do_solve = false;
@@ -607,6 +690,7 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     ui.label("V3.2 Global").on_hover_text(tl!("Ctrl: image axes; Shift: perspective axes (corners)"));
     if ui.selectable_label(!s.show_result, tl!("Edit guides")).clicked() {
         s.show_result = false;
+        s.grid_size = GRID;
         s.update_grid();
     }
     if ui.button(tl!("Rectify globally")).clicked() {

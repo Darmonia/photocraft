@@ -122,6 +122,23 @@ pub fn display_doc(app: &PhotocraftApp, idx: usize) -> Option<(Arc<Document>, u6
 pub fn menu(app: &mut PhotocraftApp, ctx: &egui::Context, id: &str, params: &Value) -> Option<Result<Value, String>> {
     let empty = params.as_object().is_none_or(|o| o.is_empty());
     let ui = params.get("ui");
+    // Opening a second distortion while Global Perspective Warp owns the canvas
+    // would strand one preview behind the other. Controls/cancel remain available.
+    if empty
+        && app.distort.global_perspective.is_some()
+        && matches!(
+            id,
+            "filter.filterGallery"
+                | "filter.liquify"
+                | "edit.puppetWarp"
+                | "layer.smartObjects.puppetWarp"
+                | "edit.perspectiveWarp"
+                | "layer.smartObjects.perspectiveWarp"
+                | "filter.vanishingPoint"
+        )
+    {
+        return Some(Err("Finish or cancel Global Perspective Warp before starting another distortion".into()));
+    }
     match id {
         "edit.perspectiveWarpGlobal" => Some((|| {
             let object = params.as_object().ok_or("global perspective parameters must be an object")?;

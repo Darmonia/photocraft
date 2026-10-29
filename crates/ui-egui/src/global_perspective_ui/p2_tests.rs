@@ -153,3 +153,115 @@ fn stale_source_keeps_visible_options_bar_and_non_destructive_cancel() {
     assert!(Arc::ptr_eq(&current, &a.session.active().unwrap().doc));
     assert_eq!(history, a.session.active().unwrap().history.past_len());
 }
+
+#[test]
+fn raw_warp_preview_rejects_color_managed_and_hdr_documents() {
+    let mut a = app();
+    a.distort.global_perspective = None;
+    a.session
+        .edit("embedded Adobe RGB", |doc, _| {
+            doc.icc_profile = Some(photocraft_cms::Builtin::AdobeRgbCompat.profile().to_bytes());
+            Ok(())
+        })
+        .unwrap();
+    let original = a.session.active().unwrap().doc.clone();
+    let history = a.session.active().unwrap().history.past_len();
+    let error = begin(&mut a, &egui::Context::default()).unwrap_err();
+    assert!(error.contains("color transform"), "{error}");
+    assert!(Arc::ptr_eq(&original, &a.session.active().unwrap().doc));
+    assert_eq!(history, a.session.active().unwrap().history.past_len());
+
+    let mut hdr = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+    hdr.session.execute("file.new", json!({"width":32,"height":24,"depth":32})).unwrap();
+    hdr.session.execute("layer.new.layer", json!({})).unwrap();
+    hdr.session
+        .edit("HDR fixture", |doc, id| {
+            doc.layer_mut(id.unwrap()).unwrap().surface_mut().unwrap().fill_rect(Rect::new(0, 0, 32, 24), &[1.5, 0.5, 0.2, 1.0]);
+            Ok(())
+        })
+        .unwrap();
+    hdr.sync_views();
+    let error = begin(&mut hdr, &egui::Context::default()).unwrap_err();
+    assert!(error.contains("8-bit RGB"), "{error}");
+    assert!(hdr.distort.global_perspective.is_none());
+}
+
+#[test]
+fn changing_monitor_color_while_editing_invalidates_preview_but_keeps_cancel() {
+    let mut a = app();
+    let idx = a.session.active_index().unwrap();
+    assert!(bound_to_active_document(&a, a.distort.global_perspective.as_ref().unwrap()));
+    a.session.color.settings.monitor_profile = "adobe-rgb-compat".into();
+    assert!(!bound_to_active_document(&a, a.distort.global_perspective.as_ref().unwrap()));
+    assert!(crate::distort_ui::display_doc(&a, idx).is_none());
+    assert!(commit(&mut a).is_err());
+    assert_eq!(control(&mut a, &json!({"cancel":true})).unwrap()["cancelled"], true);
+}
+
+#[test]
+fn competing_free_transform_and_distortion_sessions_cannot_replace_global_editor() {
+    let mut a = app();
+    let original = a.session.active().unwrap().doc.clone();
+    let history = a.session.active().unwrap().history.past_len();
+    let key = a.distort.global_perspective.as_ref().unwrap().key;
+    let ctx = egui::Context::default();
+    for id in [
+        "edit.puppetWarp",
+        "layer.smartObjects.puppetWarp",
+        "edit.perspectiveWarp",
+        "layer.smartObjects.perspectiveWarp",
+        "filter.vanishingPoint",
+        "filter.liquify",
+        "filter.filterGallery",
+    ] {
+        let error = crate::distort_ui::menu(&mut a, &ctx, id, &json!({})).unwrap().unwrap_err();
+        assert!(error.contains("Global Perspective Warp"), "{id}: {error}");
+    }
+    for action in [
+        crate::transform_tool::begin,
+        crate::transform_tool::begin_copy,
+        crate::transform_tool::begin_placed,
+        crate::transform_tool::begin_selection,
+        crate::transform_tool::begin_warp,
+    ] {
+        let error = action(&mut a, &ctx).unwrap_err();
+        assert!(error.contains("Global Perspective Warp"), "{error}");
+    }
+    assert!(a.ui.transform.is_none());
+    assert!(a.distort.gallery.is_none() && a.distort.liquify.is_none() && a.distort.puppet.is_none());
+    assert!(a.distort.perspective.is_none() && a.distort.vanishing.is_none());
+    assert_eq!(a.distort.global_perspective.as_ref().unwrap().key, key);
+    assert!(Arc::ptr_eq(&original, &a.session.active().unwrap().doc));
+    assert_eq!(history, a.session.active().unwrap().history.past_len());
+}
+
+#[test]
+fn active_guide_editor_takes_view_tool_primary_drags_but_yields_to_temporary_navigation() {
+    for tool in [crate::state::Tool::Hand, crate::state::Tool::Zoom, crate::state::Tool::RotateView] {
+        assert!(crate::canvas::global_guides_own_primary_input(true, true, false, false, false));
+        assert!(!crate::canvas::global_guides_own_primary_input(true, true, false, true, false), "Space or temporary Zoom must navigate");
+        assert!(!crate::canvas::global_guides_own_primary_input(true, true, false, false, true), "Middle button must pan");
+        assert!(!crate::canvas::global_guides_own_primary_input(false, true, false, false, false));
+        assert!(!crate::canvas::global_guides_own_primary_input(true, false, false, false, false));
+        assert!(!crate::canvas::global_guides_own_primary_input(true, true, true, false, false));
+        let mut a = app();
+        a.ui.tool = tool;
+        crate::canvas::tool_event(&mut a, ToolEvent::Down { x: 10.0, y: 10.0, pressure: 1.0 }, egui::Modifiers::NONE);
+        crate::canvas::tool_event(&mut a, ToolEvent::Up { x: 65.0, y: 75.0 }, egui::Modifiers::NONE);
+        assert_eq!(a.distort.global_perspective.as_ref().unwrap().guides.len(), 1);
+    }
+}
+
+#[test]
+fn preview_mesh_adapts_to_projective_error_or_refuses_misleading_result() {
+    let bounds = Rect::new(0, 0, 4096, 64);
+    let affine = photocraft_algo::transform::Homography([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]);
+    assert_eq!(preview_grid_size(bounds, &affine).unwrap(), GRID);
+    let perspective = photocraft_algo::transform::Homography([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.01, 0.0, 1.0]);
+    let refined = preview_grid_size(bounds, &perspective).unwrap();
+    assert!(refined > GRID, "stronger perspective should refine beyond the default {GRID}");
+    assert!(preview_mesh_exceeds_error(bounds, &perspective, GRID));
+    assert!(!preview_mesh_exceeds_error(bounds, &perspective, refined));
+    let too_steep = photocraft_algo::transform::Homography([1000.0, 0.0, 0.0, 0.0, 1000.0, 0.0, 0.01, 0.0, 1.0]);
+    assert!(preview_grid_size(bounds, &too_steep).is_err(), "unrepresentable mesh cannot be displayed as accurate");
+}
