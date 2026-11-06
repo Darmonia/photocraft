@@ -196,7 +196,9 @@ mod tests {
         let mut s = session(8);
         s.execute("select.all", json!({})).unwrap();
         let before = surf(&s);
-        assert!(s.execute(COMMAND, params()).is_err());
+        let error = s.execute(COMMAND, params()).unwrap_err().to_string();
+        assert!(error.contains("Global Perspective Warp"), "unexpected rejection: {error}");
+        assert!(!error.contains("V3"), "internal version leaked into the user-facing error: {error}");
         assert_eq!(surf(&s), before);
     }
     #[test]
